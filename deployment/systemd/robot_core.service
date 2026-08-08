@@ -1,0 +1,19 @@
+[Unit]
+Description=AMP Robot Core (perception, fusion, safety)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/amp-robot.env
+WorkingDirectory=/opt/amp-robot/app
+ExecStart=/opt/amp-robot/venv/bin/python -m amp_core.runtime_core
+Restart=on-failure
+RestartSec=3
+User=root
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>camera_driver</name>
+  <version>0.1.0</version>
+  <description>AMP robot ROS2 package: camera_driver</description>
+  <maintainer email="research@amp-robot.local">AMP Research</maintainer>
+  <license>Apache-2.0</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

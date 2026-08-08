@@ -1,0 +1,11 @@
+navigation:
+  max_linear_speed: 0.30
+  max_angular_speed: 0.70
+  goal_tolerance_m: 0.15
+  obstacle_inflate_m: 0.20
+  planner: simple  # simple | nav2 (Pi with ROS2 Nav2)
+
+slam:
+  backend: occupancy_mock  # occupancy_mock | slam_toolbox | cartographer
+  dynamic_filtering: true
+  map_save_path: maps/latest_map.json

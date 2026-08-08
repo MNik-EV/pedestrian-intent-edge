@@ -1,0 +1,9 @@
+numpy>=1.26
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+httpx>=0.27
+pytest>=8.0
+psutil>=5.9
+matplotlib>=3.8
+PyYAML>=6.0

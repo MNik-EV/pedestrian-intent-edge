@@ -1,0 +1,17 @@
+[Unit]
+Description=AMP Robot Web Dashboard
+After=robot_core.service
+Requires=robot_core.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/amp-robot.env
+WorkingDirectory=/opt/amp-robot/app
+ExecStart=/opt/amp-robot/venv/bin/python -m web_dashboard.backend.app
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

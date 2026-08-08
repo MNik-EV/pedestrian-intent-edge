@@ -1,0 +1,23 @@
+fusion:
+  mode: adaptive_fusion
+  base_r_lidar: 0.05
+  base_r_camera: 0.12
+  base_r_odom: 0.08
+  base_r_imu_yaw: 0.02
+  q_pos: 0.02
+  q_yaw: 0.01
+  conf_floor: 0.05
+  conf_ceil: 1.0
+  r_scale_min: 0.5
+  r_scale_max: 50.0
+  fixed_w_lidar: 0.6
+  fixed_w_camera: 0.2
+  fixed_w_odom: 0.15
+  fixed_w_imu: 0.05
+
+reliability:
+  mode: MODE_HEURISTIC_ADAPTIVE
+  fixed_lidar: 0.8
+  fixed_camera: 0.6
+  fixed_imu: 0.7
+  fixed_odom: 0.7

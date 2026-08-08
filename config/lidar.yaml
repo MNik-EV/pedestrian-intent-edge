@@ -1,0 +1,24 @@
+lidar:
+  driver: ld19  # ld19 | mock
+  port: /dev/ttyUSB0
+  baudrate: 230400
+  frame_id: laser
+  min_range: 0.12
+  max_range: 12.0
+  angle_min_deg: -180.0
+  angle_max_deg: 180.0
+  publish_rate_hz: 10.0
+  expected_points: 360
+
+sectors:
+  emergency_m: 0.30
+  warning_m: 0.60
+  navigation_m: 1.00
+
+topics:
+  scan: /scan
+  filtered: /lidar/filtered_scan
+  obstacles: /lidar/obstacles
+  closest: /lidar/closest_obstacle
+  health: /lidar/health
+  confidence: /lidar/confidence

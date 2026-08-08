@@ -1,0 +1,12 @@
+[Unit]
+Description=AMP Robot aggregate service
+Requires=robot_core.service robot_web.service robot_logger.service robot_monitor.service
+After=robot_core.service robot_web.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

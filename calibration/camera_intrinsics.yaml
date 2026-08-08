@@ -1,0 +1,9 @@
+# Camera intrinsics template — replace with calibrated values.
+image_width: 640
+image_height: 480
+fx: 500.0
+fy: 500.0
+cx: 320.0
+cy: 240.0
+distortion: [0.0, 0.0, 0.0, 0.0, 0.0]
+note: "PLACEHOLDER — run calibration before quantitative experiments"

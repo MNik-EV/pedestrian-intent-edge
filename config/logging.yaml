@@ -1,0 +1,8 @@
+logging:
+  level: INFO
+  jsonl_dir: logs/jsonl
+  sqlite_path: logs/telemetry.sqlite
+  experiments_dir: experiments
+  record_rosbag: true
+  record_camera_raw: false  # high volume; prefer metadata + selective frames
+  topics_high_rate_binary: [/scan, /camera/image_raw]

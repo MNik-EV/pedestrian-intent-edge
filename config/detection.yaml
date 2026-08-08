@@ -1,0 +1,17 @@
+detection:
+  # Pi real-time: stub/onnx-lite; PC research: torch_pc / heavier onnx
+  backend: stub
+  model_path: models/detector.onnx
+  conf_threshold: 0.35
+  iou_threshold: 0.45
+  input_width: 320
+  input_height: 320
+  device: cpu
+  class_names: [person, chair, bottle, laptop]
+
+tracking:
+  iou_threshold: 0.3
+  max_age: 30
+  min_hits: 3
+  dynamic_speed_mps: 0.15
+  dynamic_confirm_frames: 5
