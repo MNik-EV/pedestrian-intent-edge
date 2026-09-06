@@ -1,9 +1,30 @@
-# LiDAR (laser) → camera extrinsic template.
-x: 0.05
-y: 0.0
-z: 0.10
-roll: 0.0
-pitch: 0.0
-yaw: 0.0
-time_offset_ms: 0.0
-note: "PLACEHOLDER — calibrate on hardware"
+x: 0.0175
+y: -0.05
+z: -0.07100000000000001
+roll_deg: -4.25
+pitch_deg: 2.5
+yaw_deg: -1.0
+method: auto_practical_field_calibration
+frame: lidar_xy_up__to__opencv_camera_optical
+fixture:
+  lidar_above_camera_m: 0.08
+  camera_forward_of_lidar_m: 0.03
+  lateral_m: 0.0
+  note: ty negative because OpenCV Y is down; tz negative because LiDAR is behind
+    camera
+target:
+  distance_m: 0.5
+  box_w_m: 0.155
+  box_h_m: 0.095
+metrics:
+  cost: 5.10203782201385
+  frac_inside: 0.32727272727272727
+  median_range_m: 0.28200000000000003
+  range_err_m: 0.21799999999999997
+  u_err_norm: 0.0009183774391756266
+  v_err_norm: 0.00043515998639360835
+  n_proj: 55
+  n_inside: 18
+  n_front: 85
+disclaimer: Automatic practical field calibration with known box distance. NOT a formal
+  multi-pose extrinsic optimization.

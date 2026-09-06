@@ -1,17 +1,17 @@
 detection:
-  # Pi real-time: stub/onnx-lite; PC research: torch_pc / heavier onnx
-  backend: stub
-  model_path: models/detector.onnx
-  conf_threshold: 0.35
-  iou_threshold: 0.45
-  input_width: 320
-  input_height: 320
+  # PC: yolov8n (auto). Avoid combined Face+HOG — causes duplicate persons.
+  backend: auto
+  model_path: yolov8n.pt
+  conf_threshold: 0.50
+  iou_threshold: 0.50
+  input_width: 640
+  input_height: 640
   device: cpu
-  class_names: [person, chair, bottle, laptop]
+  class_names: [person, chair, bottle, laptop, tv, cup, book, cell phone]
 
 tracking:
-  iou_threshold: 0.3
-  max_age: 30
+  iou_threshold: 0.35
+  max_age: 12
   min_hits: 3
-  dynamic_speed_mps: 0.15
-  dynamic_confirm_frames: 5
+  dynamic_speed_mps: 0.40
+  dynamic_confirm_frames: 10

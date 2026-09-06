@@ -1,0 +1,22 @@
+{
+  "image_width": 640,
+  "image_height": 480,
+  "fx": 544.7544602330952,
+  "fy": 547.904972296359,
+  "cx": 298.40565044066534,
+  "cy": 249.22451322493504,
+  "distortion": [
+    -0.26175326068712684,
+    1.0656768018769867,
+    -0.009690567158206029,
+    0.0019310891531673635,
+    -2.4305850853303106
+  ],
+  "rms_opencv": 0.1983078548594598,
+  "mean_reprojection_error_px": 0.19830775142195126,
+  "num_images": 20,
+  "chessboard_cols": 9,
+  "chessboard_rows": 6,
+  "square_m": 0.025,
+  "note": "Real chessboard calibration"
+}

@@ -1,0 +1,6 @@
+﻿lidar:
+  port: COM17
+  baudrate: 230400
+camera:
+  index: 1
+  note: "DEFAULT everywhere: index 1 = USB PS3 Eye. Never use index 0 (laptop webcam)."

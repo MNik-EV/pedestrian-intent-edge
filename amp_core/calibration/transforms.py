@@ -71,6 +71,58 @@ class ExtrinsicTransform:
         r22 = cp * cr
         return cls(r00, r01, r02, r10, r11, r12, r20, r21, r22, x, y, z)
 
+    @classmethod
+    def lidar_to_camera_optical(
+        cls,
+        tx: float = 0.0,
+        ty: float = 0.0,
+        tz: float = 0.0,
+        roll: float = 0.0,
+        pitch: float = 0.0,
+        yaw: float = 0.0,
+    ) -> "ExtrinsicTransform":
+        """Map 2D LiDAR frame (x forward, y left, z up) → OpenCV camera (x right, y down, z forward).
+
+        Base rotation:
+            Xc = -Yl
+            Yc = -Zl
+            Zc =  Xl
+
+        Optional roll/pitch/yaw (radians) are small practical fine-tune deltas
+        applied AFTER the base optical mapping. Translation is in camera frame.
+        """
+        # Base R_l_to_c
+        base = cls(
+            r00=0.0,
+            r01=-1.0,
+            r02=0.0,
+            r10=0.0,
+            r11=0.0,
+            r12=-1.0,
+            r20=1.0,
+            r21=0.0,
+            r22=0.0,
+            tx=0.0,
+            ty=0.0,
+            tz=0.0,
+        )
+        if abs(roll) < 1e-12 and abs(pitch) < 1e-12 and abs(yaw) < 1e-12:
+            base.tx, base.ty, base.tz = tx, ty, tz
+            return base
+        # Compose: p_c = R_delta * (R_base * p_l) + t
+        delta = cls.from_xyz_rpy(0.0, 0.0, 0.0, roll, pitch, yaw)
+        # R = R_delta @ R_base
+        r00 = delta.r00 * base.r00 + delta.r01 * base.r10 + delta.r02 * base.r20
+        r01 = delta.r00 * base.r01 + delta.r01 * base.r11 + delta.r02 * base.r21
+        r02 = delta.r00 * base.r02 + delta.r01 * base.r12 + delta.r02 * base.r22
+        r10 = delta.r10 * base.r00 + delta.r11 * base.r10 + delta.r12 * base.r20
+        r11 = delta.r10 * base.r01 + delta.r11 * base.r11 + delta.r12 * base.r21
+        r12 = delta.r10 * base.r02 + delta.r11 * base.r12 + delta.r12 * base.r22
+        r20 = delta.r20 * base.r00 + delta.r21 * base.r10 + delta.r22 * base.r20
+        r21 = delta.r20 * base.r01 + delta.r21 * base.r11 + delta.r22 * base.r21
+        r22 = delta.r20 * base.r02 + delta.r21 * base.r12 + delta.r22 * base.r22
+        return cls(r00, r01, r02, r10, r11, r12, r20, r21, r22, tx, ty, tz)
+
 
 def wrap_angle(angle: float) -> float:
     """Normalize angle to [-pi, pi]."""

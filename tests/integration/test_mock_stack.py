@@ -19,7 +19,14 @@ from amp_core.pipeline import AmpPipeline, PipelineConfig
 
 
 def test_experiment_logging_and_pipeline() -> None:
-    pipe = AmpPipeline(PipelineConfig(fusion_mode=FusionMode.FIXED_FUSION))
+    pipe = AmpPipeline(
+        PipelineConfig(
+            fusion_mode=FusionMode.FIXED_FUSION,
+            force_mock_camera=True,
+            force_mock_lidar=True,
+            detector_backend="stub",
+        )
+    )
     exp_id = new_experiment_id()
     cfg = {"mode": "fixed_fusion"}
     meta = ExperimentMetadata(
@@ -40,5 +47,6 @@ def test_experiment_logging_and_pipeline() -> None:
         logger.log_sample("telemetry", snap.to_dict())
         logger.log_metric("pose_x", snap.pose["x"], method="fixed_fusion", scenario="mock")
     logger.close()
+    pipe.close()
     assert (ROOT / "experiments" / exp_id / "metadata.json").exists()
     assert (ROOT / "experiments" / exp_id / "telemetry.sqlite").exists()

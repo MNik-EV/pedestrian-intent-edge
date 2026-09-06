@@ -1,14 +1,12 @@
-# Models directory
+# Models
 
-Place detector exports here, e.g. `detector.onnx`.
+## PC (default)
+- **YOLOv8n** (`yolov8n.pt`) via Ultralytics — auto-selected by `detector.backend: auto`
+- First run downloads weights (~6 MB)
 
-Pi real-time: quantized / small input (e.g. 320) ONNX or TFLite.  
-PC research: heavier checkpoints for offline experiments.
+## Fallbacks
+- OpenCV MobileNet-SSD (+ hard filters) if YOLO cannot load
+- Do **not** use Face+HOG+DNN combined mode on webcam (duplicate person boxes)
 
-Benchmark on the actual Raspberry Pi 5 before locking a model:
-
-```bash
-python -c "from amp_core.detection.backends import *; print(benchmark_detector(create_detector(DetectorConfig(backend='stub'))))"
-```
-
-Do not claim FPS numbers without measuring on device.
+## Pi
+Prefer quantized ONNX/TFLite after on-device benchmarking. Keep YOLO for PC research.

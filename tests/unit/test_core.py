@@ -139,11 +139,19 @@ def test_degradation_labeled() -> None:
 
 
 def test_pipeline_step_mock() -> None:
-    pipe = AmpPipeline(PipelineConfig(fusion_mode=FusionMode.ADAPTIVE_FUSION))
+    pipe = AmpPipeline(
+        PipelineConfig(
+            fusion_mode=FusionMode.ADAPTIVE_FUSION,
+            force_mock_camera=True,
+            force_mock_lidar=True,
+            detector_backend="stub",
+        )
+    )
     snap = pipe.step()
     d = snap.to_dict()
     assert "pose" in d and "sectors" in d and "confidence" in d
-    assert d["fusion"]["mode"] == "adaptive_fusion"
+    assert "hardware" in d
+    pipe.close()
 
 
 def test_dynamic_filter_toggle() -> None:

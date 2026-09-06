@@ -11,6 +11,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from amp_core.hardware.discovery import discover_hardware
+
 
 def _cpu_info() -> dict:
     info = {
@@ -31,39 +36,12 @@ def _cpu_info() -> dict:
 
 def _temp_c() -> float | None:
     try:
-        # Linux thermal zones (Pi)
         zone = Path("/sys/class/thermal/thermal_zone0/temp")
         if zone.exists():
             return int(zone.read_text().strip()) / 1000.0
     except Exception:
         return None
     return None
-
-
-def _list_serial_candidates() -> list[str]:
-    candidates = []
-    for pattern in ("/dev/ttyUSB*", "/dev/ttyACM*", "/dev/serial/by-id/*"):
-        import glob
-
-        candidates.extend(glob.glob(pattern))
-    # Windows COM ports
-    if platform.system() == "Windows":
-        try:
-            import serial.tools.list_ports  # type: ignore
-
-            candidates.extend([p.device for p in serial.tools.list_ports.comports()])
-        except Exception:
-            pass
-    return sorted(set(candidates))
-
-
-def _list_video() -> list[str]:
-    import glob
-
-    vids = glob.glob("/dev/video*")
-    if platform.system() == "Windows":
-        vids.append("DirectShow: available (use OpenCV index enumeration on deploy)")
-    return vids
 
 
 def _network() -> list[dict]:
@@ -77,6 +55,7 @@ def _network() -> list[dict]:
 
 
 def main() -> int:
+    inv = discover_hardware()
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "platform": {
@@ -87,13 +66,22 @@ def main() -> int:
         },
         "cpu_ram": _cpu_info(),
         "temperature_c": _temp_c(),
-        "serial_devices": _list_serial_candidates(),
-        "video_devices": _list_video(),
+        "hardware_inventory": inv.to_dict(),
+        "serial_devices": inv.serial_ports,
+        "video_devices": [
+            f"index={c.index} {c.width}x{c.height} backend={c.backend} ({c.note})"
+            for c in inv.cameras
+            if c.ok
+        ],
+        "lidar_connected": inv.has_lidar,
+        "camera_connected": inv.has_camera,
+        "primary_camera_index": inv.primary_camera_index,
         "network": _network(),
+        "recommendations": inv.recommendations,
         "notes": [
-            "LD19 typically appears as a USB serial device.",
-            "PS3 Eye typically appears as a UVC /dev/video* device on Linux.",
-            "This PC report may not include robot peripherals until connected.",
+            "Laptop webcam is used automatically when LD19/PS3 Eye are absent.",
+            "LiDAR points are NOT faked when no serial LiDAR is found.",
+            "Object distance without LiDAR uses monocular size geometry (approximate).",
         ],
     }
     out = Path("hardware_report.json")

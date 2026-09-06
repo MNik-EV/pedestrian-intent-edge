@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import os
 import time
 from contextlib import asynccontextmanager
@@ -11,8 +10,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from amp_core import __version__
@@ -31,11 +29,15 @@ def get_pipeline() -> AmpPipeline:
     global PIPELINE
     if PIPELINE is None:
         mode = os.environ.get("AMP_FUSION_MODE", "adaptive_fusion")
+        force_mock = os.environ.get("AMP_FORCE_MOCK", "0") == "1"
         PIPELINE = AmpPipeline(
             PipelineConfig(
                 fusion_mode=FusionMode(mode),
                 dynamic_filtering=os.environ.get("AMP_DYN_FILTER", "1") == "1",
                 enable_navigation=True,
+                detector_backend=os.environ.get("AMP_DETECTOR", "auto"),
+                force_mock_camera=force_mock,
+                force_mock_lidar=force_mock,
             )
         )
     return PIPELINE
@@ -77,6 +79,10 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         pass
+    try:
+        get_pipeline().close()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -107,9 +113,6 @@ async def _tick_loop() -> None:
         snap = await asyncio.to_thread(pipe.step)
         _latest.clear()
         _latest.update(snap.to_dict())
-        # Attach camera JPEG-ish preview (raw mono as base64 for mock)
-        frame = pipe.robot.camera.capture(pipe.robot.world)
-        _latest["camera_frame_b64"] = base64.b64encode(frame.data[::8]).decode("ascii")
         dead: list[WebSocket] = []
         for ws in list(_clients):
             try:
@@ -132,12 +135,28 @@ def _rate_limit(key: str, min_interval: float = 0.05) -> None:
 
 @app.get("/api/status")
 def api_status() -> dict[str, Any]:
+    pipe = get_pipeline()
     return {
         "status": "ok",
         "version": __version__,
-        "fusion_mode": get_pipeline().cfg.fusion_mode.value,
-        "dynamic_filtering": get_pipeline().cfg.dynamic_filtering,
+        "fusion_mode": pipe.ekf.cfg.mode.value,
+        "dynamic_filtering": pipe.cfg.dynamic_filtering,
         "has_telemetry": bool(_latest),
+        "camera_live": pipe.camera_live,
+        "lidar_live": pipe.lidar_live,
+        "detector": pipe.detector.name(),
+    }
+
+
+@app.get("/api/hardware")
+def api_hardware() -> dict[str, Any]:
+    pipe = get_pipeline()
+    return {
+        "camera_live": pipe.camera_live,
+        "lidar_live": pipe.lidar_live,
+        "detector": pipe.detector.name(),
+        "inventory": pipe.inventory.to_dict(),
+        "recommendations": pipe.inventory.recommendations,
     }
 
 
@@ -321,7 +340,7 @@ input{background:#0e151b;border:1px solid var(--line);color:var(--text);border-r
   <section class="card mapcard"><h2>SLAM Map · Pose</h2><div class="viewport"><canvas id="map"></canvas></div></section>
 </main>
 <div class="bottom">
-  <div class="panel"><h3>Objects</h3><div style="overflow:auto;max-height:180px"><table><thead><tr><th>ID</th><th>Class</th><th>Conf</th><th>Dist</th><th>Dyn</th></tr></thead><tbody id="objBody"></tbody></table></div></div>
+  <div class="panel"><h3>Objects</h3><div style="overflow:auto;max-height:180px"><table><thead><tr><th>ID</th><th>Class</th><th>Conf</th><th>Dist</th><th>Brg</th><th>Dyn</th></tr></thead><tbody id="objBody"></tbody></table></div></div>
   <div class="panel"><h3>Distances</h3><div id="sectors" class="log"></div></div>
   <div class="panel"><h3>Fusion</h3><div id="fusion" class="log"></div>
     <div class="controls"><input id="token" placeholder="control token" style="flex:1"/><button class="ghost" onclick="saveToken()">Save</button></div>
@@ -351,28 +370,57 @@ async function setGoal(){await fetch('/api/navigation/goal',{method:'POST',heade
 const cam=document.getElementById('cam'), lidar=document.getElementById('lidar'), mapc=document.getElementById('map');
 function fit(c){const r=c.parentElement.getBoundingClientRect(); c.width=r.width*devicePixelRatio; c.height=r.height*devicePixelRatio; return c.getContext('2d')}
 let latest=null;
+const camImg=new Image();
+let camImgReady=false;
+camImg.onload=()=>{camImgReady=true};
 function draw(){
   if(!latest){requestAnimationFrame(draw);return}
-  // Camera overlay canvas
   let ctx=fit(cam); ctx.scale(devicePixelRatio,devicePixelRatio);
   const w=cam.width/devicePixelRatio, h=cam.height/devicePixelRatio;
   ctx.fillStyle='#101820'; ctx.fillRect(0,0,w,h);
-  // projected lidar
-  (latest.projected_lidar||[]).forEach(p=>{ctx.fillStyle='rgba(46,183,201,.85)'; ctx.fillRect(p.u/640*w, p.v/480*h, 2,2)});
+  const cw=(latest.camera&&latest.camera.width)||640;
+  const ch=(latest.camera&&latest.camera.height)||480;
+  if(latest.camera_jpeg_b64){
+    const src='data:image/jpeg;base64,'+latest.camera_jpeg_b64;
+    if(camImg.src!==src){ camImgReady=false; camImg.src=src; }
+    if(camImgReady){ ctx.drawImage(camImg,0,0,w,h); }
+  } else {
+    ctx.fillStyle='#8aa0b2'; ctx.font='14px IBM Plex Mono';
+    ctx.fillText('No live camera frame (mock or permission denied)', 16, 28);
+  }
+  (latest.projected_lidar||[]).forEach(p=>{ctx.fillStyle='rgba(46,183,201,.85)'; ctx.fillRect(p.u/cw*w, p.v/ch*h, 2,2)});
   (latest.objects||[]).forEach(o=>{
-    const b=o.bbox; const sx=w/640, sy=h/480;
+    const b=o.bbox; const sx=w/cw, sy=h/ch;
     ctx.strokeStyle=o.is_dynamic?'#e85d5d':'#3ecf8e'; ctx.lineWidth=2;
     ctx.strokeRect(b.x1*sx,b.y1*sy,(b.x2-b.x1)*sx,(b.y2-b.y1)*sy);
     ctx.fillStyle='#e7eef4'; ctx.font='12px IBM Plex Mono';
     const dist=o.distance_m!=null?o.distance_m.toFixed(2)+' m':'—';
-    ctx.fillText(`${o.class_name.toUpperCase()} #${o.track_id}  ${dist}  ${o.confidence.toFixed(2)}  ${o.is_dynamic?'DYNAMIC':'STATIC'}`, b.x1*sx, Math.max(12,b.y1*sy-4));
+    const br=o.bearing_deg!=null?((o.bearing_deg>=0?'+':'')+o.bearing_deg.toFixed(1)+'°'):'';
+    ctx.fillText(`${o.class_name.toUpperCase()} #${o.track_id}  ${dist}  ${br}  ${o.confidence.toFixed(2)}  ${o.is_dynamic?'DYNAMIC':'STATIC'}`, b.x1*sx, Math.max(12,b.y1*sy-4));
   });
   // LiDAR radar
   ctx=fit(lidar); ctx.scale(devicePixelRatio,devicePixelRatio);
   const W=lidar.width/devicePixelRatio, H=lidar.height/devicePixelRatio, cx=W/2, cy=H/2, scale=Math.min(W,H)/(2*6);
   ctx.fillStyle='#0a1014'; ctx.fillRect(0,0,W,H);
-  [['#e85d5d',0.3],['#e6b84d',0.6],['#2eb7c9',1.0]].forEach(([col,r])=>{ctx.beginPath();ctx.arc(cx,cy,r*scale,0,Math.PI*2);ctx.strokeStyle=col;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1});
-  (latest.lidar_points||[]).forEach(p=>{ctx.fillStyle='#9fd7e0'; ctx.fillRect(cx+p.x*scale, cy-p.y*scale, 2,2)});
+  const hw=latest.hardware||{};
+  if(!hw.lidar_live){
+    ctx.fillStyle='#e6b84d'; ctx.font='14px IBM Plex Mono';
+    ctx.fillText('LiDAR NOT CONNECTED', 16, 28);
+    ctx.fillStyle='#8aa0b2'; ctx.font='12px IBM Plex Mono';
+    ctx.fillText('Showing vision-based distance sectors only', 16, 48);
+    // draw object bearings as rays
+    (latest.objects||[]).forEach(o=>{
+      if(o.distance_m==null||o.bearing_deg==null) return;
+      const rad=o.bearing_deg*Math.PI/180;
+      const rr=o.distance_m*scale;
+      ctx.strokeStyle=o.is_dynamic?'#e85d5d':'#3ecf8e';
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.sin(rad)*rr, cy-Math.cos(rad)*rr); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx+Math.sin(rad)*rr, cy-Math.cos(rad)*rr, 5, 0, Math.PI*2); ctx.fillStyle=ctx.strokeStyle; ctx.fill();
+    });
+  } else {
+    [['#e85d5d',0.3],['#e6b84d',0.6],['#2eb7c9',1.0]].forEach(([col,r])=>{ctx.beginPath();ctx.arc(cx,cy,r*scale,0,Math.PI*2);ctx.strokeStyle=col;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1});
+    (latest.lidar_points||[]).forEach(p=>{ctx.fillStyle='#9fd7e0'; ctx.fillRect(cx+p.x*scale, cy-p.y*scale, 2,2)});
+  }
   ctx.fillStyle='#c9a227'; ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
   // Map
   ctx=fit(mapc); ctx.scale(devicePixelRatio,devicePixelRatio);
@@ -385,9 +433,6 @@ function draw(){
       const v=data[y][x]; if(!v) continue; ctx.fillStyle=v===2?'#3a5160':'#1a2a33'; ctx.fillRect(x*cs,y*cs,cs+0.5,cs+0.5);
     }
     const pose=m.pose||latest.pose||{};
-    if(pose.x!=null){
-      const ox=(-m.origin_x)/ (m.resolution||0.05) * (cs/( (m.resolution||0.05)/(m.resolution||0.05) ));
-    }
     ctx.fillStyle='#c9a227';
     const px = mw/2 + (pose.x||0)*20; const py = mh/2 - (pose.y||0)*20;
     ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
@@ -402,12 +447,15 @@ function renderTables(d){
   const body=document.getElementById('objBody'); body.innerHTML='';
   (d.objects||[]).forEach(o=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${o.track_id}</td><td>${o.class_name}</td><td>${o.confidence.toFixed(2)}</td><td>${o.distance_m!=null?o.distance_m.toFixed(2)+'m':'—'}</td><td>${o.is_dynamic?'YES':'NO'}</td>`;
+    const br=o.bearing_deg!=null?o.bearing_deg.toFixed(1)+'°':'—';
+    tr.innerHTML=`<td>${o.track_id}</td><td>${o.class_name}</td><td>${o.confidence.toFixed(2)}</td><td>${o.distance_m!=null?o.distance_m.toFixed(2)+'m':'—'}</td><td>${br}</td><td>${o.is_dynamic?'YES':'NO'}</td>`;
     body.appendChild(tr);
   });
   const s=d.sectors||{};
+  const src=s.source|| (d.hardware&&d.hardware.lidar_live?'lidar':'camera');
   document.getElementById('sectors').textContent =
-`FRONT       ${(s.front??0).toFixed(2)} m
+`source: ${src}
+FRONT       ${(s.front??0).toFixed(2)} m
 FRONT_LEFT  ${(s.front_left??0).toFixed(2)} m
 FRONT_RIGHT ${(s.front_right??0).toFixed(2)} m
 LEFT        ${(s.left??0).toFixed(2)} m
@@ -415,21 +463,22 @@ RIGHT       ${(s.right??0).toFixed(2)} m
 REAR_LEFT   ${(s.rear_left??0).toFixed(2)} m
 REAR        ${(s.rear??0).toFixed(2)} m
 REAR_RIGHT  ${(s.rear_right??0).toFixed(2)} m`;
-  const f=d.fusion||{}, c=d.confidence||{}, sys=d.system||{}, saf=d.safety||{};
+  const f=d.fusion||{}, c=d.confidence||{}, sys=d.system||{}, saf=d.safety||{}, hw=d.hardware||{};
   document.getElementById('fusion').textContent =
 `mode=${f.mode||'—'}  hz=${(f.update_rate_hz||0).toFixed(1)}
+detector=${sys.detector||hw.detector||'—'}
 weights lidar=${(f.sensor_weights||{}).lidar?.toFixed?.(2)??'—'} cam=${(f.sensor_weights||{}).camera?.toFixed?.(2)??'—'}
 conf L=${(c.lidar??0).toFixed(2)} C=${(c.camera??0).toFixed(2)}
 safety=${saf.action||'—'} (${saf.reason||''})
-camFPS=${(sys.camera_fps||0).toFixed(1)} lidarFPS=${(sys.lidar_fps||0).toFixed(1)}`;
+camFPS=${(sys.camera_fps||0).toFixed(1)} detFPS=${(sys.detection_fps||0).toFixed(1)}`;
   document.getElementById('logs').textContent=(d.events||[]).join('\\n');
   const pills=document.getElementById('statusPills');
   const ok = (saf.action||'ALLOW')!=='ESTOP';
   pills.innerHTML=`
     <div class="pill ${ok?'ok':'err'}">ROBOT ${saf.action||'…'}</div>
-    <div class="pill">CPU ${(sys.cpu_percent||0).toFixed(0)}%</div>
-    <div class="pill">TEMP ${sys.temperature_c??'—'}°C</div>
-    <div class="pill">FPS ${(sys.camera_fps||0).toFixed(1)}</div>
+    <div class="pill ${hw.camera_live?'ok':'warn'}">CAM ${hw.camera_live?'LIVE':'OFF'}</div>
+    <div class="pill ${hw.lidar_live?'ok':'warn'}">LIDAR ${hw.lidar_live?'LIVE':'OFF'}</div>
+    <div class="pill">DET ${(sys.detection_fps||0).toFixed(1)} FPS</div>
     <div class="pill ok">WS LIVE</div>`;
 }
 const wsProto = location.protocol==='https:'?'wss':'ws';
