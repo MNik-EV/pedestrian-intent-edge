@@ -238,5 +238,7 @@ def fuse_detections_distances(
     results: list[FusedDistance | None] = [None] * len(detections)
     for i in order:
         bbox, cls, _ = detections[i]
-        results[i] = estimate_detection_distance(bbox, cls, points, K, reserve_points=True)
+        results[i] = estimate_detection_distance(
+            bbox, cls, points, K, reserve_points=True
+        )
     return [r for r in results if r is not None]

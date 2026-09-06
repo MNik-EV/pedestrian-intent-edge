@@ -1,4 +1,4 @@
-﻿"""Quick live preview of the USB PS3 Eye (default index from demo_hardware.yaml)."""
+"""Quick live preview of the USB PS3 Eye (default index from demo_hardware.yaml)."""
 
 from __future__ import annotations
 

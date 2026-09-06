@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
-from amp_core.common.types import LidarScan, SectorDistances, Timestamp
+from amp_core.common.types import LidarScan, SectorDistances
 
 
 @dataclass
@@ -133,7 +133,9 @@ def extract_obstacles(
     return obstacles
 
 
-def scan_quality_features(scan: LidarScan, expected_points: int = 360) -> dict[str, float]:
+def scan_quality_features(
+    scan: LidarScan, expected_points: int = 360
+) -> dict[str, float]:
     """Measurable features for LiDAR reliability estimation."""
     n = len(scan.ranges)
     if n == 0:

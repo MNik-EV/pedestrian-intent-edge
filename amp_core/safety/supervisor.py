@@ -129,16 +129,25 @@ class SafetySupervisor:
                 )
 
         # Speed caps
-        lin = max(-self.cfg.max_linear_speed, min(self.cfg.max_linear_speed, cmd.linear))
-        ang = max(-self.cfg.max_angular_speed, min(self.cfg.max_angular_speed, cmd.angular))
+        lin = max(
+            -self.cfg.max_linear_speed, min(self.cfg.max_linear_speed, cmd.linear)
+        )
+        ang = max(
+            -self.cfg.max_angular_speed, min(self.cfg.max_angular_speed, cmd.angular)
+        )
 
         action = SafetyAction.ALLOW
         reason = "ok"
         if sectors is not None and min_dist < self.cfg.warning_distance:
             if self.cfg.enable_soft_slowdown:
-                scale = max(0.0, (min_dist - self.cfg.emergency_stop_distance) / max(
-                    1e-3, self.cfg.warning_distance - self.cfg.emergency_stop_distance
-                ))
+                scale = max(
+                    0.0,
+                    (min_dist - self.cfg.emergency_stop_distance)
+                    / max(
+                        1e-3,
+                        self.cfg.warning_distance - self.cfg.emergency_stop_distance,
+                    ),
+                )
                 lin *= scale
                 action = SafetyAction.SLOW
                 reason = "warning_zone"

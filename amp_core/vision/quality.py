@@ -104,7 +104,9 @@ def compute_vision_features(
     )
 
 
-def synthetic_feature_grid(width: int, height: int, step: int = 40) -> list[tuple[float, float]]:
+def synthetic_feature_grid(
+    width: int, height: int, step: int = 40
+) -> list[tuple[float, float]]:
     """Deterministic feature grid for mock / degraded-environment tests."""
     pts: list[tuple[float, float]] = []
     for y in range(step, height - step, step):

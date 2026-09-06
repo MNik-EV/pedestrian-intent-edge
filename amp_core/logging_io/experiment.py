@@ -6,11 +6,10 @@ import csv
 import json
 import sqlite3
 import hashlib
-import os
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass
@@ -119,7 +118,9 @@ class ExperimentLogger:
         with self._events.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, default=str) + "\n")
 
-    def log_metric(self, metric: str, value: float, method: str = "", scenario: str = "") -> None:
+    def log_metric(
+        self, metric: str, value: float, method: str = "", scenario: str = ""
+    ) -> None:
         import time
 
         with self._metrics.open("a", newline="", encoding="utf-8") as f:

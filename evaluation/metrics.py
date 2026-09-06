@@ -43,7 +43,9 @@ def align_umeyama_2d(
     return yaw, tx, ty
 
 
-def absolute_trajectory_error(est: list[PoseSample], gt: list[PoseSample]) -> dict[str, float]:
+def absolute_trajectory_error(
+    est: list[PoseSample], gt: list[PoseSample]
+) -> dict[str, float]:
     n = min(len(est), len(gt))
     if n == 0:
         return {"ate_rmse": float("nan"), "ate_mean": float("nan"), "n": 0.0}

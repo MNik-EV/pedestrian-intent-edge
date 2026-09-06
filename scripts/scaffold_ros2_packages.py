@@ -165,7 +165,7 @@ NODE_PY = dedent(
 )
 
 LAUNCH_PY = dedent(
-    '''\
+    """\
     from launch import LaunchDescription
     from launch_ros.actions import Node
 
@@ -182,7 +182,7 @@ LAUNCH_PY = dedent(
                 )
             ]
         )
-    '''
+    """
 )
 
 PARAMS = "enabled: true\n"
@@ -223,13 +223,17 @@ def main() -> None:
         (pkg / "config").mkdir(exist_ok=True)
         (pkg / "resource").mkdir(exist_ok=True)
         (pkg / "resource" / name).write_text("", encoding="utf-8")
-        (pkg / name / "__init__.py").write_text('"""ROS2 Python package."""\n', encoding="utf-8")
+        (pkg / name / "__init__.py").write_text(
+            '"""ROS2 Python package."""\n', encoding="utf-8"
+        )
         (pkg / name / "node.py").write_text(NODE_PY.format(name=name), encoding="utf-8")
         (pkg / "launch" / "placeholder.launch.py").write_text(
             LAUNCH_PY.format(name=name), encoding="utf-8"
         )
         (pkg / "config" / "params.yaml").write_text(PARAMS, encoding="utf-8")
-        (pkg / "setup.py").write_text(SETUP_TEMPLATE.format(name=name), encoding="utf-8")
+        (pkg / "setup.py").write_text(
+            SETUP_TEMPLATE.format(name=name), encoding="utf-8"
+        )
         (pkg / "setup.cfg").write_text(
             f"[develop]\nscript_dir=$base/lib/{name}\n[install]\ninstall_scripts=$base/lib/{name}\n",
             encoding="utf-8",

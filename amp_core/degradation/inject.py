@@ -5,7 +5,6 @@ All degradation is synthetic, labeled, and never presented as real-world noise.
 
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
 
@@ -51,7 +50,12 @@ class DegradationEngine:
             data = bytes(data)
         ts = frame.timestamp
         if self.cfg.timestamp_jitter_ms > 0:
-            jitter = int(self.rng.uniform(-self.cfg.timestamp_jitter_ms, self.cfg.timestamp_jitter_ms) * 1e6)
+            jitter = int(
+                self.rng.uniform(
+                    -self.cfg.timestamp_jitter_ms, self.cfg.timestamp_jitter_ms
+                )
+                * 1e6
+            )
             ts = Timestamp(wall_ns=ts.wall_ns + jitter, mono_ns=ts.mono_ns + jitter)
         return ImageFrame(
             width=frame.width,
@@ -72,12 +76,21 @@ class DegradationEngine:
         for r, a in zip(scan.ranges, scan.angles):
             if self.rng.random() < self.cfg.lidar_drop_prob:
                 continue
-            noise = self.rng.gauss(0.0, self.cfg.lidar_noise_std) if self.cfg.lidar_noise_std > 0 else 0.0
+            noise = (
+                self.rng.gauss(0.0, self.cfg.lidar_noise_std)
+                if self.cfg.lidar_noise_std > 0
+                else 0.0
+            )
             ranges.append(max(0.0, r + noise))
             angles.append(a)
         ts = scan.timestamp
         if self.cfg.timestamp_jitter_ms > 0:
-            jitter = int(self.rng.uniform(-self.cfg.timestamp_jitter_ms, self.cfg.timestamp_jitter_ms) * 1e6)
+            jitter = int(
+                self.rng.uniform(
+                    -self.cfg.timestamp_jitter_ms, self.cfg.timestamp_jitter_ms
+                )
+                * 1e6
+            )
             ts = Timestamp(wall_ns=ts.wall_ns + jitter, mono_ns=ts.mono_ns + jitter)
         return LidarScan(
             ranges=ranges,
@@ -110,8 +123,12 @@ class DegradationEngine:
 # Named scenario presets for the benchmark suite
 SCENARIO_DEGRADATIONS: dict[str, DegradationConfig] = {
     "normal": DegradationConfig(label="scenario1_normal"),
-    "low_light": DegradationConfig(label="scenario2_low_light", camera_brightness_scale=0.35),
-    "texture_poor": DegradationConfig(label="scenario3_texture_poor", camera_blur_box=5),
+    "low_light": DegradationConfig(
+        label="scenario2_low_light", camera_brightness_scale=0.35
+    ),
+    "texture_poor": DegradationConfig(
+        label="scenario3_texture_poor", camera_blur_box=5
+    ),
     "lidar_degraded": DegradationConfig(
         label="scenario9_lidar_degradation", lidar_drop_prob=0.25, lidar_noise_std=0.05
     ),

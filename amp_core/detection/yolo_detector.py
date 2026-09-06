@@ -156,12 +156,15 @@ class YoloV8Detector(DetectorBackend):
             self._model = None
 
     def name(self) -> str:
-        return "yolov8n" if self._model is not None else f"yolo_unavailable:{self._error}"
+        return (
+            "yolov8n" if self._model is not None else f"yolo_unavailable:{self._error}"
+        )
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         if self._model is None:
             return []
-        import numpy as np
 
         t0 = time.perf_counter()
         bgr = _bytes_to_bgr(image_bgr_or_gray, width, height, channels)
@@ -174,7 +177,9 @@ class YoloV8Detector(DetectorBackend):
             conf=max(0.45, self.cfg.conf_threshold),
             iou=max(0.45, self.cfg.iou_threshold),
             imgsz=640,
-            device=self.cfg.device if self.cfg.device in {"cpu", "0", "cuda"} else "cpu",
+            device=self.cfg.device
+            if self.cfg.device in {"cpu", "0", "cuda"}
+            else "cpu",
         )
         latency = (time.perf_counter() - t0) * 1000.0
         out: list[Detection] = []
@@ -195,7 +200,9 @@ class YoloV8Detector(DetectorBackend):
                 Detection(
                     class_name=class_name,
                     confidence=conf,
-                    bbox=BoundingBox(float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])),
+                    bbox=BoundingBox(
+                        float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
+                    ),
                     timestamp=Timestamp.now(),
                     inference_latency_ms=latency,
                 )

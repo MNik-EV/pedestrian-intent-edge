@@ -135,7 +135,11 @@ class AdaptiveEKF:
             FusionMode.ADAPTIVE_FUSION,
             FusionMode.ADAPTIVE_FUSION_DYNFILTER,
         }
-        scale = bounded_r_scale(w, self.cfg) if adaptive else 1.0 / max(w, self.cfg.conf_floor)
+        scale = (
+            bounded_r_scale(w, self.cfg)
+            if adaptive
+            else 1.0 / max(w, self.cfg.conf_floor)
+        )
         scale = max(self.cfg.r_scale_min, min(self.cfg.r_scale_max, scale))
         R = self._base_r(meas.source) * scale
 

@@ -13,7 +13,9 @@ log = logging.getLogger("amp.runtime_core")
 
 
 def main() -> None:
-    pipe = AmpPipeline(PipelineConfig(fusion_mode=FusionMode.ADAPTIVE_FUSION, enable_navigation=True))
+    pipe = AmpPipeline(
+        PipelineConfig(fusion_mode=FusionMode.ADAPTIVE_FUSION, enable_navigation=True)
+    )
     log.info("AMP core runtime started")
     while True:
         snap = pipe.step()

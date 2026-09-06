@@ -12,7 +12,12 @@ log = logging.getLogger("amp.monitor")
 
 
 def read_stats() -> dict:
-    stats = {"cpu_percent": None, "ram_percent": None, "temperature_c": None, "disk_percent": None}
+    stats = {
+        "cpu_percent": None,
+        "ram_percent": None,
+        "temperature_c": None,
+        "disk_percent": None,
+    }
     try:
         import psutil
 

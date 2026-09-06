@@ -14,7 +14,6 @@ that node later, but it is not run there today.
 from __future__ import annotations
 
 import math
-import struct
 from dataclasses import dataclass
 
 from amp_core.common.types import LidarScan, Timestamp

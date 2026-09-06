@@ -72,7 +72,9 @@ def main() -> int:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
     eval_summary = {}
     if (exp / "eval_summary.json").exists():
-        eval_summary = json.loads((exp / "eval_summary.json").read_text(encoding="utf-8"))
+        eval_summary = json.loads(
+            (exp / "eval_summary.json").read_text(encoding="utf-8")
+        )
 
     generated = _try_plots(exp, plots_dir)
     summary = {
@@ -95,7 +97,7 @@ img{{max-width:100%;border:1px solid #ddd}}</style></head><body>
 <h2>Evaluation</h2>
 <pre>{json.dumps(eval_summary or {"status": "NOT YET MEASURED"}, indent=2)}</pre>
 <h2>Plots</h2>
-{''.join(f'<p>{p}</p><img src="plots/{p}"/>' for p in generated if p.endswith('.png')) or '<p>No plots generated (install matplotlib or add metrics.csv).</p>'}
+{"".join(f'<p>{p}</p><img src="plots/{p}"/>' for p in generated if p.endswith(".png")) or "<p>No plots generated (install matplotlib or add metrics.csv).</p>"}
 </body></html>"""
     (exp / "experiment_report.html").write_text(html, encoding="utf-8")
     # Copy metrics if present

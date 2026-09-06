@@ -14,7 +14,10 @@ def test_network_mode_builds_network_capture(monkeypatch: pytest.MonkeyPatch) ->
         lambda: {
             "camera": {
                 "mode": "network",
-                "network": {"url": "http://pi.test/stream.mjpg", "reconnect_timeout_s": 1.5},
+                "network": {
+                    "url": "http://pi.test/stream.mjpg",
+                    "reconnect_timeout_s": 1.5,
+                },
             }
         },
     )

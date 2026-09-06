@@ -28,7 +28,9 @@ class StubDetector(DetectorBackend):
     def name(self) -> str:
         return "stub"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         self._frame += 1
         t0 = time.perf_counter()
         cx = (width * 0.3 + (self._frame % 80) * 2.0) % (width * 0.7)
@@ -64,9 +66,13 @@ class OnnxDetector(DetectorBackend):
     def name(self) -> str:
         return "onnx" if self._session is not None else "onnx_unavailable"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         if self._session is None:
-            return StubDetector(self.cfg).detect(image_bgr_or_gray, width, height, channels)
+            return StubDetector(self.cfg).detect(
+                image_bgr_or_gray, width, height, channels
+            )
         return []
 
 
@@ -113,10 +119,16 @@ def create_detector(cfg: DetectorConfig) -> DetectorBackend:
             def name(self) -> str:
                 return self._inner.name() + "+filter"
 
-            def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int):
+            def detect(
+                self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+            ):
                 raw = self._inner.detect(image_bgr_or_gray, width, height, channels)
                 return filter_detections(
-                    raw, width, height, min_conf=max(0.55, cfg.conf_threshold), max_area_frac=0.55
+                    raw,
+                    width,
+                    height,
+                    min_conf=max(0.55, cfg.conf_threshold),
+                    max_area_frac=0.55,
                 )
 
         return FilteredDnn()

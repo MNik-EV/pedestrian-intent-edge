@@ -45,7 +45,9 @@ def test_experiment_logging_and_pipeline() -> None:
     for _ in range(5):
         snap = pipe.step()
         logger.log_sample("telemetry", snap.to_dict())
-        logger.log_metric("pose_x", snap.pose["x"], method="fixed_fusion", scenario="mock")
+        logger.log_metric(
+            "pose_x", snap.pose["x"], method="fixed_fusion", scenario="mock"
+        )
     logger.close()
     pipe.close()
     assert (ROOT / "experiments" / exp_id / "metadata.json").exists()

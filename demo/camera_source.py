@@ -53,7 +53,9 @@ def open_camera_source(
                 "camera.mode is 'network' but no camera.network.url is set in "
                 "config/demo_hardware.yaml (expected e.g. http://raspberrypi.local:8000/stream.mjpg)"
             )
-        timeout = float((cam_cfg.get("network", {}) or {}).get("reconnect_timeout_s", 3.0))
+        timeout = float(
+            (cam_cfg.get("network", {}) or {}).get("reconnect_timeout_s", 3.0)
+        )
         return NetworkCameraCapture(url=url, reconnect_timeout_s=timeout)
 
     return LiveCamera(index=camera_index, width=width, height=height)

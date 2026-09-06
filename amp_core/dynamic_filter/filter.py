@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from amp_core.common.types import LidarScan, TrackedObject
-from amp_core.lidar.processing import extract_obstacles, Obstacle
+from amp_core.lidar.processing import Obstacle
 
 
 @dataclass
@@ -72,7 +72,8 @@ class DynamicObstacleFilter:
             for t in dynamic_tracks:
                 assert t.bearing_deg is not None and t.distance_m is not None
                 if (
-                    _angle_diff_deg(bearing, t.bearing_deg) <= self.cfg.association_bearing_deg
+                    _angle_diff_deg(bearing, t.bearing_deg)
+                    <= self.cfg.association_bearing_deg
                     and abs(r - t.distance_m) <= self.cfg.association_range_m
                 ):
                     drop = True

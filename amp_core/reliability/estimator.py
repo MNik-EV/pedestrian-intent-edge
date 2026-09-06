@@ -83,8 +83,10 @@ class HeuristicReliabilityEstimator(ReliabilityEstimator):
             lidar_c = (
                 self.cfg.lidar_valid_w * lidar_features.get("valid_ratio", 0.0)
                 + self.cfg.lidar_density_w * lidar_features.get("point_density", 0.0)
-                + self.cfg.lidar_jump_w * (1.0 - lidar_features.get("range_jump_rate", 1.0))
-                + self.cfg.lidar_temporal_w * lidar_features.get("temporal_consistency", 0.0)
+                + self.cfg.lidar_jump_w
+                * (1.0 - lidar_features.get("range_jump_rate", 1.0))
+                + self.cfg.lidar_temporal_w
+                * lidar_features.get("temporal_consistency", 0.0)
             )
 
         camera_c = self.cfg.fixed_camera
@@ -161,7 +163,9 @@ def create_reliability_estimator(cfg: ReliabilityConfig) -> ReliabilityEstimator
     return HeuristicReliabilityEstimator(cfg)
 
 
-def lidar_confidence_from_scan(scan: LidarScan, cfg: ReliabilityConfig | None = None) -> SensorConfidence:
+def lidar_confidence_from_scan(
+    scan: LidarScan, cfg: ReliabilityConfig | None = None
+) -> SensorConfidence:
     cfg = cfg or ReliabilityConfig()
     feats = scan_quality_features(scan)
     return create_reliability_estimator(cfg).estimate(lidar_features=feats)

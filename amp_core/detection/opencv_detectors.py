@@ -43,9 +43,7 @@ SSD_CLASSES = (
 PROTOTXT_URL = (
     "https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/deploy.prototxt"
 )
-CAFFEMODEL_URL = (
-    "https://github.com/chuanqi305/MobileNet-SSD/raw/master/mobilenet_iter_73000.caffemodel"
-)
+CAFFEMODEL_URL = "https://github.com/chuanqi305/MobileNet-SSD/raw/master/mobilenet_iter_73000.caffemodel"
 
 
 def ensure_mobilenet_ssd(models_dir: Path) -> tuple[Path, Path] | None:
@@ -57,7 +55,11 @@ def ensure_mobilenet_ssd(models_dir: Path) -> tuple[Path, Path] | None:
             urllib.request.urlretrieve(PROTOTXT_URL, prototxt)
         if not caffemodel.exists() or caffemodel.stat().st_size < 1_000_000:
             urllib.request.urlretrieve(CAFFEMODEL_URL, caffemodel)
-        if prototxt.exists() and caffemodel.exists() and caffemodel.stat().st_size > 1_000_000:
+        if (
+            prototxt.exists()
+            and caffemodel.exists()
+            and caffemodel.stat().st_size > 1_000_000
+        ):
             return prototxt, caffemodel
     except Exception:
         return None
@@ -111,7 +113,9 @@ class OpenCVFaceDetector(DetectorBackend):
     def name(self) -> str:
         return "opencv_face"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         import cv2
 
         t0 = time.perf_counter()
@@ -147,14 +151,18 @@ class OpenCVHogDetector(DetectorBackend):
         import cv2
 
         if not hasattr(cv2, "HOGDescriptor"):
-            raise RuntimeError("cv2.HOGDescriptor missing — pip install 'opencv-python>=4.8,<5'")
+            raise RuntimeError(
+                "cv2.HOGDescriptor missing — pip install 'opencv-python>=4.8,<5'"
+            )
         self._hog = cv2.HOGDescriptor()
         self._hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
     def name(self) -> str:
         return "opencv_hog"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         t0 = time.perf_counter()
         bgr = _bytes_to_bgr(image_bgr_or_gray, width, height, channels)
         if bgr is None:
@@ -184,10 +192,16 @@ class OpenCVHogDetector(DetectorBackend):
 class OpenCVDnnDetector(DetectorBackend):
     """MobileNet-SSD multi-class. Falls back to empty list if model unavailable."""
 
-    def __init__(self, cfg: DetectorConfig, models_dir: str | Path | None = None) -> None:
+    def __init__(
+        self, cfg: DetectorConfig, models_dir: str | Path | None = None
+    ) -> None:
         self.cfg = cfg
         self._net = None
-        root = Path(models_dir) if models_dir else Path(__file__).resolve().parents[2] / "models"
+        root = (
+            Path(models_dir)
+            if models_dir
+            else Path(__file__).resolve().parents[2] / "models"
+        )
         paths = ensure_mobilenet_ssd(root)
         if paths is None:
             return
@@ -201,7 +215,9 @@ class OpenCVDnnDetector(DetectorBackend):
     def name(self) -> str:
         return "opencv_dnn" if self._net is not None else "opencv_dnn_unloaded"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         if self._net is None:
             return []
         import cv2
@@ -260,7 +276,9 @@ class CombinedWebcamDetector(DetectorBackend):
     def name(self) -> str:
         return "combined[" + "+".join(p.name() for p in self._parts) + "]"
 
-    def detect(self, image_bgr_or_gray: bytes, width: int, height: int, channels: int) -> list[Detection]:
+    def detect(
+        self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
+    ) -> list[Detection]:
         merged: list[Detection] = []
         for part in self._parts:
             merged.extend(part.detect(image_bgr_or_gray, width, height, channels))
