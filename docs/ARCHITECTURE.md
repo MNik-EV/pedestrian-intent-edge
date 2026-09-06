@@ -3,7 +3,7 @@
 ## Validated thesis path
 
 ```text
-┌──────────────────────────────┐   USB Ethernet / HTTP MJPEG
+┌──────────────────────────────┐       Wi-Fi / HTTP MJPEG
 │ Raspberry Pi Zero 2W         │──────────────────────────┐
 │ IMX219-120 --CSI--> picamera2│                          │
 │ camera relay only            │                          ▼
@@ -18,10 +18,9 @@
 ```
 
 The Pi Zero 2W is intentionally not the inference computer. It captures the CSI-only
-camera and relays compressed frames over a fixed `169.254.64.2` link; Wi-Fi remains a
-fallback. The LD19 is attached directly to the laptop, where
-both streams meet. This partition avoids CPU/RAM pressure on the Zero 2W and keeps all
-fusion decisions on one host.
+camera and relays compressed frames over Wi-Fi. The LD19 is attached directly to the
+laptop, where both streams meet. This partition avoids CPU/RAM pressure on the Zero 2W
+and keeps all fusion decisions on one host.
 
 ## Live data flow
 

@@ -4,11 +4,11 @@
 
 | Item | Interface | Role |
 |---|---|---|
-| Raspberry Pi Zero 2W, Raspberry Pi OS Lite 64-bit | USB Ethernet; Wi-Fi fallback | CSI capture and MJPEG relay only |
+| Raspberry Pi Zero 2W, Raspberry Pi OS Lite 64-bit | Wi-Fi to laptop | CSI capture and MJPEG relay only |
 | IMX219-120, 8 MP camera module | CSI ribbon to Pi | RGB semantics/object detection input |
 | LDROBOT LD19, 2D LiDAR | USB–UART to laptop, 230400 baud | Metric range and geometry input |
 | Rigid 3D-printed bracket | Mechanical | Keeps camera–LiDAR extrinsics fixed |
-| Laptop | USB Ethernet + USB serial; Wi-Fi optional | AI, fusion, dashboard, and recording |
+| Laptop | USB serial + Wi-Fi | AI, fusion, dashboard, and recording |
 
 The optional IMU, encoders, motors, and Pi 5 mentioned by early scaffold files are not
 required by the implemented thesis system.
@@ -21,8 +21,8 @@ required by the implemented thesis system.
    GPIO rail.
 3. Connect the LD19 through its correct USB–UART adapter to the laptop. Confirm the
    adapter voltage/pinout against the module documentation before power-on.
-4. Connect the Pi Zero's data-capable `USB` port to the laptop. The fixed camera endpoint
-   is `http://169.254.64.2:8000/stream.mjpg`; Wi-Fi/mDNS is an optional fallback.
+4. Put the Pi and laptop on the same Wi-Fi network and set the Pi's hostname/IP in
+   `config/demo_hardware.yaml` (`zero2w-fusion.local` by default).
 
 ## Physical mount
 

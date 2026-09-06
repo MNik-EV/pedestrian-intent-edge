@@ -6,8 +6,10 @@ camera:
   #           before the Pi was wired up). Never use index 0 (laptop webcam).
   mode: network
   network:
-    # Stable direct USB-Ethernet address; independent of Wi-Fi/router changes.
-    url: "http://169.254.64.2:8000/stream.mjpg"
+    # Pi hostname is Zero2W-Fusion (mDNS: zero2w-fusion.local), joined to the
+    # laptop's Wi-Fi network. If mDNS is unreliable, replace with the Pi's IP
+    # from its router's client list (or `hostname -I` on the Pi over SSH).
+    url: "http://zero2w-fusion.local:8000/stream.mjpg"
     reconnect_timeout_s: 3.0
   index: 1
 lidar:

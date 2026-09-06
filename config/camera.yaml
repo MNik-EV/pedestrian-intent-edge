@@ -2,7 +2,7 @@ camera:
   driver: network_mjpeg  # primary: Pi Zero 2W picamera2 relay
   model: IMX219-120
   transport: http_mjpeg
-  stream_url: http://169.254.64.2:8000/stream.mjpg  # stable direct USB-Ethernet link
+  stream_url: http://zero2w-fusion.local:8000/stream.mjpg  # Pi on the shared Wi-Fi network
   # Bench-only USB fallback; index 1 was the PS3 Eye on the development laptop.
   device_index: 1
   width: 640

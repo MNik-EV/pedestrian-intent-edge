@@ -58,34 +58,26 @@ cd ~/amp_edge   # or wherever you copied edge/
 python3 camera_streamer.py --width 640 --height 480 --fps 15 --port 8000
 ```
 
-From the laptop (or any browser on the same network), open:
+From the laptop (or any browser on the same Wi-Fi network as the Pi), open:
 
 ```
-http://<pi-hostname>.local:8000/
+http://zero2w-fusion.local:8000/
 ```
 
-(or `http://<pi-ip>:8000/`) — you should see a live preview `<img>` tag and a
-raw stream link. Find the Pi's hostname/IP with `hostname` / `hostname -I` on
-the Pi, or `ping raspberrypi.local` from the laptop if mDNS/Avahi is working.
-
-### Router-independent direct USB connection
-
-The prepared thesis SD card exposes the Zero 2W as a USB Ethernet gadget with the fixed
-link-local address `169.254.64.2`. Connect the laptop to the micro-USB port labelled
-`USB` (not `PWR IN`) with a data-capable cable. This path needs no router, DHCP server, or
-saved Wi-Fi password:
-
-```powershell
-ssh amp-pi
-start http://169.254.64.2:8000/
-```
-
-The laptop SSH alias is stored in `~/.ssh/config`. `ssh amp-pi-wifi` remains available as
-an mDNS fallback whenever the Pi and laptop share a LAN.
+(hostname `Zero2W-Fusion`, set at flash time; or use the Pi's IP from your
+router's client list if mDNS doesn't resolve) — you should see a live
+preview `<img>` tag and a raw stream link. SSH in with `ssh nik@zero2w-fusion.local`
+using the password set in Raspberry Pi Imager.
 
 If the image is choppy or the Pi struggles, lower `--fps` (e.g. 10) or
 `--quality` (e.g. 50) before raising resolution — the Zero 2W's CPU is the
 bottleneck, not the network.
+
+A USB-Ethernet gadget mode (a fixed link-local IP over a data-capable USB
+cable, independent of Wi-Fi) was tried as a more robust alternative to
+Wi-Fi/mDNS, but is not currently configured on the SD card — the present
+image uses plain Wi-Fi. Revisit gadget mode only if Wi-Fi proves unreliable
+on presentation day.
 
 ## 3. Point the laptop at it
 
