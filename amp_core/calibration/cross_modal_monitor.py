@@ -49,8 +49,3 @@ class CrossModalMonitor:
             "n_samples": float(self._n_seen),
             "n_conflicts": float(self._n_conflicts),
         }
-
-    def reset(self) -> None:
-        self._mean_abs_z = 0.0
-        self._n_seen = 0
-        self._n_conflicts = 0
