@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Professor showcase demo — polished live LD19 + USB PS3 Eye perception.
+"""Professor showcase demo — polished live LD19 + camera perception.
+
+Camera source is the Pi Zero 2W + IMX219-120 network stream by default (see
+config/demo_hardware.yaml), with a directly-attached USB camera (e.g. the
+PS3 Eye used during bench development) available as a fallback.
 
   python demo_show.py
 
@@ -24,7 +28,7 @@ from fastapi.responses import HTMLResponse, Response
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from demo.defaults import default_camera_index, default_lidar_port
+from demo.defaults import default_lidar_port
 from demo.logger import DemoLogger
 from demo.perception import DemoPerception
 
@@ -91,7 +95,7 @@ td.num{font-variant-numeric:tabular-nums}
 <header>
   <div class="brand">
     <h1>AMP <span>Live Perception</span></h1>
-    <p>Adaptive multimodal perception for low-cost indoor robots — live LD19 LiDAR + USB PS3 Eye fusion with object detection and real distance estimation.</p>
+    <p>Adaptive multimodal perception for low-cost indoor robots — live LD19 LiDAR + Pi Zero 2W/IMX219-120 camera fusion with object detection and real distance estimation.</p>
   </div>
   <div class="pills" id="pills"><div class="pill">Starting…</div></div>
 </header>
@@ -198,7 +202,7 @@ function render(d){
   sys.innerHTML = `
     <b>Experiment</b>: ${d.experiment_id||''}<br/>
     <b>Detector</b>: ${d.detector}<br/>
-    <b>Camera index</b>: ${d.camera_index} (USB PS3 Eye)<br/>
+    <b>Camera source</b>: ${d.camera_source}<br/>
     <b>LiDAR port</b>: ${d.lidar_port}<br/>
     <b>Uptime</b>: ${d.uptime_s.toFixed(0)} s<br/>
     <b>Intrinsics RMS</b>: ${d.intrinsics_rms??'—'} px
@@ -233,13 +237,21 @@ connectWs();
 
 
 class ShowcaseEngine:
-    def __init__(self, camera_index: int, lidar_port: str, intrinsics: str, extrinsics: str) -> None:
+    def __init__(
+        self,
+        camera_index: int | None,
+        camera_url: str | None,
+        lidar_port: str,
+        intrinsics: str,
+        extrinsics: str,
+    ) -> None:
         self.intrinsics_path = Path(intrinsics)
         self.extrinsics_path = Path(extrinsics)
         self.camera_index = camera_index
         self.lidar_port = lidar_port
         self.perception = DemoPerception(
             camera_index=camera_index,
+            camera_url=camera_url,
             lidar_port=lidar_port,
             intrinsics_path=intrinsics,
             extrinsics_path=extrinsics,
@@ -311,7 +323,9 @@ async def lifespan(app: FastAPI):
     global ENGINE, LOGGER
     assert ARGS is not None
     LOGGER = DemoLogger(prefix="SHOW")
-    ENGINE = ShowcaseEngine(ARGS.camera, ARGS.lidar_port, ARGS.intrinsics, ARGS.extrinsics)
+    ENGINE = ShowcaseEngine(
+        ARGS.camera, ARGS.camera_url, ARGS.lidar_port, ARGS.intrinsics, ARGS.extrinsics
+    )
     print("SHOWCASE experiment:", LOGGER.dir.resolve())
     print("Detector:", ENGINE.detector.name())
     task = asyncio.create_task(_loop())
@@ -352,7 +366,7 @@ async def _loop() -> None:
             "projected_count": snap["projected_count"],
             "experiment_id": LOGGER.exp_id,
             "detector": ENGINE.detector.name(),
-            "camera_index": ENGINE.camera_index,
+            "camera_source": type(ENGINE.perception.camera).__name__,
             "lidar_port": ENGINE.lidar_port,
             "intrinsics_rms": ENGINE.intrinsics_rms,
             "calib_html": ENGINE.calib_html(),
@@ -429,7 +443,17 @@ def main() -> None:
     p = argparse.ArgumentParser(description="AMP professor showcase demo")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
-    p.add_argument("--camera", type=int, default=default_camera_index())
+    p.add_argument(
+        "--camera",
+        type=int,
+        default=None,
+        help="Force USB camera.mode with this OpenCV index (overrides config/demo_hardware.yaml)",
+    )
+    p.add_argument(
+        "--camera-url",
+        default=None,
+        help="Force network camera.mode with this MJPEG URL (overrides config/demo_hardware.yaml)",
+    )
     p.add_argument("--lidar-port", default=default_lidar_port())
     p.add_argument("--intrinsics", default="calibration/camera_intrinsics.yaml")
     p.add_argument("--extrinsics", default="calibration/lidar_camera_extrinsics.yaml")

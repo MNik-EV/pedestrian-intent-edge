@@ -25,7 +25,7 @@ from fastapi.responses import HTMLResponse, Response
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from demo.defaults import default_camera_index, default_lidar_port
+from demo.defaults import default_lidar_port
 from demo.logger import DemoLogger
 from demo.perception import DemoPerception
 
@@ -214,6 +214,7 @@ async def lifespan(app: FastAPI):
     print("Experiment folder:", LOGGER.dir.resolve())
     PERCEPTION = DemoPerception(
         camera_index=args.camera,
+        camera_url=args.camera_url,
         lidar_port=args.lidar_port,
         intrinsics_path=args.intrinsics,
         extrinsics_path=args.extrinsics,
@@ -290,8 +291,14 @@ def main() -> None:
     parser.add_argument(
         "--camera",
         type=int,
-        default=default_camera_index(),
-        help="OpenCV camera index (default: USB PS3 Eye from config/demo_hardware.yaml)",
+        default=None,
+        help="Force USB camera.mode with this OpenCV index (overrides config/demo_hardware.yaml)",
+    )
+    parser.add_argument(
+        "--camera-url",
+        default=None,
+        help="Force network camera.mode with this MJPEG URL (overrides config/demo_hardware.yaml, "
+        "e.g. http://raspberrypi.local:8000/stream.mjpg)",
     )
     parser.add_argument(
         "--lidar-port",

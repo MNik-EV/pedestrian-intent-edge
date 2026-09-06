@@ -1,10 +1,14 @@
 """LD19 serial protocol helper + mock-capable scan publisher logic (ROS-agnostic).
 
-Physical validation on Raspberry Pi 5:
-  1. Connect LD19 USB serial
-  2. Confirm device via scripts/discover_hardware.py
-  3. Set config/lidar.yaml port
-  4. Launch lidar_driver on ROS2 Jazzy
+Physical validation (laptop-direct, the implemented/tested path):
+  1. Connect LD19 USB serial directly to the laptop
+  2. Confirm device via scripts/discover_hardware.py (or demo/verify_sensors.py)
+  3. Set config/demo_hardware.yaml lidar.port
+  4. Real packet parsing + CRC8 validation lives in demo/ld19_live.py
+
+A ROS2 lidar_driver node (ros2_ws/) targeting an onboard Raspberry Pi 5 is
+documented future work; this module's parser is written to be reusable by
+that node later, but it is not run there today.
 """
 
 from __future__ import annotations

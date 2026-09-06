@@ -18,8 +18,7 @@ from amp_core.calibration.transforms import (
     lidar_polar_to_camera,
 )
 from amp_core.detection.backends import DetectorConfig, create_detector
-from demo.camera_live import LiveCamera
-from demo.defaults import default_camera_index
+from demo.camera_source import open_camera_source
 from demo.ld19_live import LD19Reader
 
 
@@ -117,6 +116,7 @@ class DemoPerception:
     def __init__(
         self,
         camera_index: int | None = None,
+        camera_url: str | None = None,
         lidar_port: str | None = None,
         intrinsics_path: str = "calibration/camera_intrinsics.yaml",
         extrinsics_path: str = "calibration/lidar_camera_extrinsics.yaml",
@@ -136,8 +136,13 @@ class DemoPerception:
 
         self.K = load_intrinsics(ip)
         self.ext = load_extrinsics(ep)
-        cam_idx = default_camera_index() if camera_index is None else camera_index
-        self.camera = LiveCamera(cam_idx, self.K.width, self.K.height)
+        self.camera = open_camera_source(
+            camera_index=camera_index,
+            camera_url=camera_url,
+            width=self.K.width,
+            height=self.K.height,
+        )
+        self.notes.append(f"camera source: {type(self.camera).__name__}")
         self.lidar = LD19Reader(port=lidar_port)
         self.detector = create_detector(
             DetectorConfig(backend="auto", conf_threshold=0.40, model_path="yolov8n.pt")

@@ -1,6 +1,14 @@
-﻿lidar:
+camera:
+  # network = Raspberry Pi Zero 2W + IMX219-120 CSI camera, streamed as
+  #           MJPEG/HTTP by edge/camera_streamer.py (primary path).
+  # usb     = a camera directly attached to this laptop (bench-debug
+  #           fallback only, e.g. the USB PS3 Eye used during development
+  #           before the Pi was wired up). Never use index 0 (laptop webcam).
+  mode: network
+  network:
+    url: "http://raspberrypi.local:8000/stream.mjpg"
+    reconnect_timeout_s: 3.0
+  index: 1
+lidar:
   port: COM17
   baudrate: 230400
-camera:
-  index: 1
-  note: "DEFAULT everywhere: index 1 = USB PS3 Eye. Never use index 0 (laptop webcam)."
