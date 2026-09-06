@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amp-robot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Adaptive Multimodal Perception and Sensor Fusion for Robust Low-Cost Autonomous Indoor Robots"
 readme = "README.md"
 requires-python = ">=3.11"

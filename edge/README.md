@@ -9,7 +9,7 @@ the Pi.
 
 This split exists because the IMX219-120 is a CSI-ribbon camera (not USB/UVC)
 so it can only be captured by a device with a CSI port — the Pi — while a
-Zero 2W (single-core-class A53 quad @ 1 GHz, 512 MB RAM) is too weak to also
+Zero 2W (quad-core Cortex-A53 @ 1 GHz, 512 MB RAM) is too constrained to also
 run YOLO detection and sensor fusion in real time. Streaming raw MJPEG and
 doing all the heavy compute on the laptop is the standard, low-risk pattern
 for this hardware pairing.
@@ -76,15 +76,19 @@ attached USB camera) if the Pi isn't powered on.
 
 ## 4. Auto-start on boot (optional but recommended for demo day)
 
+The supplied unit is a per-user service and assumes the folder is `~/amp_edge`. This avoids
+hard-coding the Raspberry Pi username:
+
 ```bash
-sudo cp systemd/amp-camera-stream.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now amp-camera-stream.service
-sudo systemctl status amp-camera-stream.service
+mkdir -p ~/.config/systemd/user
+cp systemd/amp-camera-stream.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now amp-camera-stream.service
+systemctl --user status amp-camera-stream.service
 ```
 
-Edit the `WorkingDirectory`/`ExecStart` paths in the unit file first if you
-copied `edge/` somewhere other than `/home/pi/amp_edge`.
+To start it after boot even before interactive login, run
+`sudo loginctl enable-linger "$USER"`. Edit the unit if the folder is not `~/amp_edge`.
 
 ## 5. Physical mount and re-calibration
 
@@ -94,9 +98,15 @@ LD19 are mounted on that bracket in their final positions, re-run the
 extrinsic calibration on the laptop so the LiDAR-camera geometry used by
 `amp_core/calibration/distance_fusion.py` matches the real assembled rig:
 
+First measure the LiDAR origin relative to the camera optical centre in camera axes,
+then supply those values (metres) as the optimizer seed:
+
 ```bash
-python demo/auto_calibrate_extrinsics.py
+python demo/auto_calibrate_extrinsics.py \
+  --seed-tx <right> --seed-ty <down> --seed-tz <forward> \
+  --target-m 1.0 --box-w 0.30 --box-h 0.30
 ```
 
-A rigid mount is what makes a one-time calibration stay valid — if the
-camera or LiDAR shift relative to each other after mounting, re-run it again.
+A rigid mount is what makes a one-time calibration stay valid. The drawing does not
+identify the sensors' internal reference origins, so do not infer the final transform from
+CAD dimensions alone. If either sensor shifts after calibration, rerun the procedure.

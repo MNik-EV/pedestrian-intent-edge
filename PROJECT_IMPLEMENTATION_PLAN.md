@@ -1,5 +1,11 @@
 # Project Implementation Plan
 
+> Historical note (2026-09-06): this was the original Pi 5/ROS2 scaffold plan. The
+> implemented bachelor's-thesis path now uses a Pi Zero 2W as an IMX219 camera relay,
+> an LD19 directly connected to the laptop, and laptop-side AI/fusion. See `README.md` and
+> `docs/ARCHITECTURE.md` for the current architecture. ROS2/navigation items below remain
+> future work and must not be reported as completed physical validation.
+
 **Title:** Adaptive Multimodal Perception and Sensor Fusion for Robust Low-Cost Autonomous Indoor Robots
 
 **Codename:** `amp-robot` (Adaptive Multimodal Perception Robot)

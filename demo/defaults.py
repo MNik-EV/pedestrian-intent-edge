@@ -24,6 +24,8 @@ DEFAULT_RECONNECT_TIMEOUT_S = 3.0
 DEFAULT_CAMERA_INDEX = 1
 DEFAULT_LIDAR_PORT = "COM17"
 DEFAULT_LIDAR_BAUD = 230400
+DEFAULT_INTRINSICS_PATH = "calibration/imx219_intrinsics.yaml"
+DEFAULT_EXTRINSICS_PATH = "calibration/imx219_ld19_extrinsics.yaml"
 
 
 def load_demo_hardware() -> dict:

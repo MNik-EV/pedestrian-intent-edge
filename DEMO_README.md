@@ -1,102 +1,78 @@
-# AMP Live Hardware Demo — tonight
+# Live hardware demonstration
 
-## One command
+## Final signal path
 
-```bash
-python app.py
-```
+- IMX219-120 → CSI → Raspberry Pi Zero 2W → MJPEG/HTTP over Wi-Fi → laptop
+- LD19 → USB–serial at 230400 baud → laptop
+- Laptop → YOLO detection + calibrated range fusion + dashboard + JSONL log
 
-Then open: http://127.0.0.1:8000
+No mock LiDAR is used by `app.py` or `demo_show.py`. The legacy PS3 Eye remains only as
+an explicit `camera.mode: usb` bench fallback.
 
-Optional:
+## Preparation
 
-```bash
-python app.py
-# defaults from config/demo_hardware.yaml → USB PS3 Eye index 1, LiDAR COM17
-```
+1. Start the Pi camera relay using [edge/README.md](edge/README.md).
+2. Set `camera.network.url` and `lidar.port` in `config/demo_hardware.yaml`.
+3. Verify both sources:
 
-On this PC: **camera index 1 = USB PS3 Eye** (default everywhere). Index 0 = laptop webcam — do not use.
+   ```bash
+   python demo/verify_sensors.py --seconds 10
+   ```
 
-## What is REAL tonight
+4. Generate IMX219 calibration files using [docs/CALIBRATION.md](docs/CALIBRATION.md).
+   The archived PS3 Eye values are invalid for this camera/lens/mount.
 
-| Item | Status |
-|------|--------|
-| USB camera stream | Real |
-| LD19 LiDAR UART @ 230400 | Real (must appear as a COM/`ttyUSB` device) |
-| LiDAR→camera overlay | Real projection using calib files |
-| Object detection | Real pretrained YOLO/MobileNet (no training) |
-| Object distance | Real median of LiDAR points falling inside each box |
-| Dashboard | Live WebSocket updates |
-| JSONL experiment log | Real numeric telemetry under `experiments/DEMO_<timestamp>/` |
+## Run
 
-## What is NOT tonight (next phase)
-
-- SLAM / mapping
-- Localization / path planning / motor control
-- ROS2
-- Formal multi-pose extrinsic optimization (we use **practical field calibration**)
-- Claiming centimeter metrology accuracy
-
-## Setup order (do this once on the robot laptop)
-
-### 0) Drivers / cables
-- LD19 must show up as a serial port (CH340 / CP2102 USB-UART common).
-- Check: `python demo/verify_sensors.py`
-
-### 1) Verify both sensors
-```bash
-python demo/verify_sensors.py --seconds 5
-```
-Expect camera FPS > 10 and LiDAR scan Hz roughly ~5–15 (or high packet Hz).
-
-### 2) Intrinsic calibration (chessboard)
-Print a chessboard. Default expects **9×6 inner corners**, 25 mm squares (override with flags).
-```bash
-python demo/calibrate_intrinsics.py --shots 20
-```
-Writes `calibration/camera_intrinsics.yaml` and prints mean reprojection error (px).
-
-### 3) Extrinsic calibration (fixture + automatic box tune)
-
-OpenCV camera frame: **x right, y down, z forward**. For this fixture:
-- LiDAR **8 cm above** camera → `ty = -0.08`
-- Camera **3 cm forward** of LiDAR → `tz = -0.03`
-- Lateral aligned → `tx = 0`
-
-Place a **15.5 × 9.5 cm** box with front face at **0.50 m**, then:
-
-```bash
-python demo/auto_calibrate_extrinsics.py --target-m 0.50 --box-w 0.155 --box-h 0.095
-```
-
-Draw a ROI around the box face; the script auto-searches yaw/pitch/roll + small translation and saves `calibration/lidar_camera_extrinsics.yaml`.
-
-Manual keyboard fine-tune (optional):
-```bash
-python demo/calibrate_extrinsics.py
-```
-
-**Honest label:** practical field calibration, **not** formal multi-pose hand-eye metrology.
-
-### 4) Professor showcase demo
 ```bash
 python demo_show.py
 ```
-Open http://127.0.0.1:8000
 
-Or the simpler dashboard:
+Open <http://127.0.0.1:8000>. The page shows the annotated RGB image, LiDAR radar,
+classified objects, object ranges/bearings, detector latency, camera/scan rates, and
+calibration metadata. A simpler UI is available with `python app.py`.
+
+Useful overrides:
+
 ```bash
-python app.py
+python demo_show.py --camera-url http://192.168.1.50:8000/stream.mjpg --lidar-port COM17
+python demo_show.py --camera 1  # local USB bench fallback only
 ```
 
-## Acceptance checklist
+## What is real
 
-- [ ] `python app.py` starts with one command
-- [ ] Browser shows live annotated camera + LiDAR radar
-- [ ] Object distances roughly match a known held distance (±15 cm typical indoor)
-- [ ] `experiments/DEMO_*/telemetry.jsonl` grows with real numbers
-- [ ] Stable for ~10 minutes
+| Item | Evidence |
+|---|---|
+| LD19 acquisition | CRC8-validated packets and assembled scans from `demo/ld19_live.py` |
+| Camera acquisition | Decoded frames from the Pi MJPEG stream |
+| Object semantics | Real pretrained YOLO/MobileNet inference |
+| Object range | Calibrated bearing/depth-cluster LiDAR association; monocular cue is labeled |
+| Dashboard | Live WebSocket telemetry and JPEG stream |
+| Recording | `experiments/SHOW_<timestamp>/telemetry.jsonl` |
 
-## If LiDAR is not detected
+## What must still be measured on the physical final rig
 
-This PC currently may show **no COM ports** until the USB-UART adapter is plugged and its Windows driver is installed. The demo **will refuse to start with fake LiDAR** — that is intentional.
+- IMX219 intrinsic matrix/distortion and reprojection error
+- final camera–LiDAR transform and independent projection error
+- distance MAE/RMSE across ranges, bearings, object classes, and lighting
+- end-to-end latency/jitter and long-run stability
+
+These are deliberately not pre-filled. The thesis result tables remain `NOT YET
+MEASURED` until the supplied protocol is executed.
+
+## Presentation acceptance checklist
+
+- [ ] Pi preview opens from the laptop browser
+- [ ] `verify_sensors.py` exits 0 with plausible FPS, scan rate, and point count
+- [ ] final IMX219 calibration files exist and their resolution matches the stream
+- [ ] LiDAR dots align on targets at centre and both sides of the image
+- [ ] known-distance checks at several ranges are within the measured acceptance bound
+- [ ] `demo_show.py` runs for at least 10 minutes without an unhandled exception
+- [ ] a fresh `SHOW_*` telemetry folder is created
+- [ ] dashboard labels the actual detector and camera source
+
+## Failure policy
+
+If either real sensor is absent, the live demo fails with a diagnostic message. For a
+hardware-free software rehearsal use `python scripts/run_mock_stack.py`; clearly label its
+output as simulation.

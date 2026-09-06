@@ -5,11 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/amp_edge
-ExecStart=/usr/bin/python3 /home/pi/amp_edge/camera_streamer.py --width 640 --height 480 --fps 15 --port 8000
+WorkingDirectory=%h/amp_edge
+ExecStart=/usr/bin/python3 %h/amp_edge/camera_streamer.py --width 640 --height 480 --fps 15 --port 8000
 Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

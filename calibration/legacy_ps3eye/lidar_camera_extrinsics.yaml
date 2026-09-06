@@ -5,6 +5,7 @@ roll_deg: -4.25
 pitch_deg: 2.5
 yaw_deg: -1.0
 method: auto_practical_field_calibration
+camera_model: Sony PS3 Eye (legacy bench prototype)
 frame: lidar_xy_up__to__opencv_camera_optical
 fixture:
   lidar_above_camera_m: 0.08
@@ -27,4 +28,4 @@ metrics:
   n_inside: 18
   n_front: 85
 disclaimer: Automatic practical field calibration with known box distance. NOT a formal
-  multi-pose extrinsic optimization.
+  multi-pose extrinsic optimization. Invalid for the final IMX219-120 mount.

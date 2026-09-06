@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0-thesis — 2026-09-06
+
+### Added
+- Raspberry Pi Zero 2W + IMX219-120 `picamera2` MJPEG edge streamer
+- Reconnecting laptop network-camera client and source factory
+- Network-camera support in live demo, verification, and calibration workflows
+- Final-rig experiment protocol and expanded thesis-writing structure
+
+### Changed
+- Final architecture is laptop-centric: LD19 direct USB–serial, camera via Pi relay
+- Active calibration filenames now target IMX219; legacy PS3 Eye values are archived
+- Documentation distinguishes real hardware, controlled mocks, and future ROS2 work
+- Live frames are undistorted when measured distortion coefficients are available
+
+### Fixed
+- Camera stream thread cleanup and connection-state handling after network loss
+- Calibration scripts no longer assume PS3 Eye geometry or old mount offsets
+
 ## 0.1.0-research — 2026-08-08
 
 ### Added

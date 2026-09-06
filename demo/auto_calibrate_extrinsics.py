@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Automatic practical extrinsic fine-tune using a known box at a known distance.
 
-Fixture geometry (measured) → OpenCV camera frame (x right, y down, z forward):
-  • LiDAR center is 8 cm ABOVE camera          → ty = -0.08
-  • Camera is 3 cm FORWARD of LiDAR            → tz = -0.03  (LiDAR behind camera)
-  • Lateral axes aligned                       → tx =  0.00
+The translation seed must be measured on the final rigid bracket. The CAD
+drawing constrains the mount but does not identify both sensors' optical
+centres, so this script never infers extrinsics from the drawing alone.
 
 Place a rectangular box (default 15.5 × 9.5 cm) with its front face ~0.50 m
 from the fixture. Draw a ROI around the box face, then the script searches
@@ -36,18 +35,14 @@ from amp_core.calibration.transforms import (  # noqa: E402
     ExtrinsicTransform,
     lidar_polar_to_camera,
 )
-from demo.camera_live import LiveCamera  # noqa: E402
-from demo.defaults import default_camera_index, default_lidar_port  # noqa: E402
+from demo.camera_source import open_camera_source  # noqa: E402
+from demo.defaults import (  # noqa: E402
+    DEFAULT_EXTRINSICS_PATH,
+    DEFAULT_INTRINSICS_PATH,
+    default_lidar_port,
+)
 from demo.ld19_live import LD19Reader  # noqa: E402
-from demo.perception import color_by_range, load_intrinsics  # noqa: E402
-
-# Correct physical seed for this fixture (meters / degrees)
-SEED_TX = 0.0
-SEED_TY = -0.08  # LiDAR higher → negative camera-Y
-SEED_TZ = -0.03  # camera further forward → LiDAR behind → negative camera-Z
-SEED_ROLL = 0.0
-SEED_PITCH = 0.0
-SEED_YAW = 0.0
+from demo.perception import color_by_range, load_intrinsics, undistort_bgr  # noqa: E402
 
 
 @dataclass
@@ -89,7 +84,9 @@ class Capture:
 
 
 def select_roi(frame: np.ndarray) -> tuple[int, int, int, int]:
-    print("\nDraw a tight rectangle around the FRONT FACE of the box, then ENTER/SPACE.")
+    print(
+        "\nDraw a tight rectangle around the FRONT FACE of the box, then ENTER/SPACE."
+    )
     print("Press C to cancel.")
     r = cv2.selectROI("Select box face", frame, showCrosshair=True, fromCenter=False)
     cv2.destroyWindow("Select box face")
@@ -135,7 +132,9 @@ def score(
     fr, fa = front_cluster(cap.ranges, cap.angles_rad, target_m)
     if len(fr) < 5:
         # Fall back to all forward points
-        fr, fa = front_cluster(cap.ranges, cap.angles_rad, target_m, band=0.45, angle_deg=50.0)
+        fr, fa = front_cluster(
+            cap.ranges, cap.angles_rad, target_m, band=0.45, angle_deg=50.0
+        )
     if len(fr) < 3:
         return 1e6, {"reason": "too_few_lidar", "n": len(fr)}
 
@@ -169,7 +168,8 @@ def score(
         + u_err * 2.5
         + v_err * 1.2
         + width_err * 0.8
-        + 0.15 * (abs(params.yaw) / 15.0 + abs(params.pitch) / 15.0 + abs(params.roll) / 15.0)
+        + 0.15
+        * (abs(params.yaw) / 15.0 + abs(params.pitch) / 15.0 + abs(params.roll) / 15.0)
     )
     metrics = {
         "cost": cost,
@@ -185,12 +185,23 @@ def score(
     return cost, metrics
 
 
-def optimize(K: CameraIntrinsics, cap: Capture, seed: Params, target_m: float, box_w_m: float) -> tuple[Params, dict]:
+def optimize(
+    K: CameraIntrinsics, cap: Capture, seed: Params, target_m: float, box_w_m: float
+) -> tuple[Params, dict]:
     best = seed
     best_cost, best_m = score(best, K, cap, target_m, box_w_m)
     print(f"Seed cost={best_cost:.3f}  metrics={best_m}")
 
-    def run_grid(yaw_vals, pitch_vals, roll_vals, dtx_vals, dty_vals, dtz_vals, base: Params, label: str) -> None:
+    def run_grid(
+        yaw_vals,
+        pitch_vals,
+        roll_vals,
+        dtx_vals,
+        dty_vals,
+        dtz_vals,
+        base: Params,
+        label: str,
+    ) -> None:
         nonlocal best, best_cost, best_m
         tested = 0
         for yaw in yaw_vals:
@@ -211,7 +222,9 @@ def optimize(K: CameraIntrinsics, cap: Capture, seed: Params, target_m: float, b
                                 tested += 1
                                 if c < best_cost:
                                     best_cost, best, best_m = c, p, m
-        print(f"{label} tested={tested}  best_cost={best_cost:.3f}  {best.to_dict()}  {best_m}")
+        print(
+            f"{label} tested={tested}  best_cost={best_cost:.3f}  {best.to_dict()}  {best_m}"
+        )
 
     # Stage 1: coarse yaw/pitch + small height/forward nudges
     run_grid(
@@ -232,7 +245,7 @@ def optimize(K: CameraIntrinsics, cap: Capture, seed: Params, target_m: float, b
         np.linspace(-0.025, 0.025, 5),
         np.linspace(-0.025, 0.025, 5),
         np.linspace(-0.035, 0.035, 7),
-        Params(SEED_TX, SEED_TY, SEED_TZ, 0, 0, 0),
+        seed,
         "Stage 2/3",
     )
     # Stage 3: fine local polish around current best
@@ -249,11 +262,15 @@ def optimize(K: CameraIntrinsics, cap: Capture, seed: Params, target_m: float, b
     return best, best_m
 
 
-def visualize(K: CameraIntrinsics, cap: Capture, params: Params, metrics: dict) -> np.ndarray:
+def visualize(
+    K: CameraIntrinsics, cap: Capture, params: Params, metrics: dict
+) -> np.ndarray:
     vis = cap.bgr.copy()
     x1, y1, x2, y2 = cap.roi
     cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 220, 255), 2)
-    proj = lidar_polar_to_camera(cap.ranges, cap.angles_rad, params.as_ext(), K, z_plane=0.0)
+    proj = lidar_polar_to_camera(
+        cap.ranges, cap.angles_rad, params.as_ext(), K, z_plane=0.0
+    )
     for u, v, r in proj:
         inside = x1 <= u <= x2 and y1 <= v <= y2
         color = (0, 255, 80) if inside else color_by_range(r)
@@ -267,17 +284,48 @@ def visualize(K: CameraIntrinsics, cap: Capture, params: Params, metrics: dict) 
         f"err={metrics.get('range_err_m', float('nan')):.3f}m",
     ]
     for i, t in enumerate(lines):
-        cv2.putText(vis, t, (10, 24 + i * 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (240, 240, 240), 1)
+        cv2.putText(
+            vis,
+            t,
+            (10, 24 + i * 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (240, 240, 240),
+            1,
+        )
     return vis
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--camera", type=int, default=default_camera_index())
+    ap.add_argument(
+        "--camera", type=int, default=None, help="force a local USB camera index"
+    )
+    ap.add_argument("--camera-url", default=None, help="force a Pi MJPEG stream URL")
     ap.add_argument("--lidar-port", default=default_lidar_port())
-    ap.add_argument("--intrinsics", default="calibration/camera_intrinsics.yaml")
-    ap.add_argument("--out", default="calibration/lidar_camera_extrinsics.yaml")
-    ap.add_argument("--target-m", type=float, default=0.50, help="known box distance (meters)")
+    ap.add_argument("--intrinsics", default=DEFAULT_INTRINSICS_PATH)
+    ap.add_argument("--out", default=DEFAULT_EXTRINSICS_PATH)
+    ap.add_argument(
+        "--seed-tx",
+        type=float,
+        required=True,
+        help="measured LiDAR origin X in camera frame [m]",
+    )
+    ap.add_argument(
+        "--seed-ty",
+        type=float,
+        required=True,
+        help="measured LiDAR origin Y in camera frame [m]",
+    )
+    ap.add_argument(
+        "--seed-tz",
+        type=float,
+        required=True,
+        help="measured LiDAR origin Z in camera frame [m]",
+    )
+    ap.add_argument(
+        "--target-m", type=float, default=0.50, help="known box distance (meters)"
+    )
     ap.add_argument("--box-w", type=float, default=0.155, help="box width meters")
     ap.add_argument("--box-h", type=float, default=0.095, help="box height meters")
     ap.add_argument("--seconds", type=float, default=2.5, help="capture averaging time")
@@ -289,16 +337,23 @@ def main() -> int:
         return 1
     K = load_intrinsics(Kpath)
 
-    print("=== Fixture → camera-frame translation (corrected) ===")
-    print(f"  tx={SEED_TX:.3f}  (lateral aligned)")
-    print(f"  ty={SEED_TY:.3f}  (LiDAR 8cm ABOVE → negative Y-down)")
-    print(f"  tz={SEED_TZ:.3f}  (camera 3cm FORWARD → LiDAR behind)")
-    print("Your earlier ty=0.03 tz=0.09 mixed fixture axes with OpenCV axes; corrected above.")
+    print(
+        "=== Measured bracket seed in OpenCV camera axes (x right, y down, z forward) ==="
+    )
+    print(f"  tx={args.seed_tx:.3f}  ty={args.seed_ty:.3f}  tz={args.seed_tz:.3f}")
     print()
-    print(f"Place the {args.box_w*100:.1f}×{args.box_h*100:.1f} cm box at ~{args.target_m:.2f} m.")
-    print("USB camera index:", args.camera, "  LiDAR:", args.lidar_port)
+    print(
+        f"Place the {args.box_w * 100:.1f}×{args.box_h * 100:.1f} cm box at ~{args.target_m:.2f} m."
+    )
+    print("LiDAR:", args.lidar_port)
 
-    cam = LiveCamera(args.camera, width=K.width, height=K.height)
+    cam = open_camera_source(
+        camera_index=args.camera,
+        camera_url=args.camera_url,
+        width=K.width,
+        height=K.height,
+    )
+    print("Camera source:", type(cam).__name__)
     cam.start()
     lidar = LD19Reader(port=args.lidar_port)
     lidar.start()
@@ -311,8 +366,10 @@ def main() -> int:
             lidar.get_scan()
 
         fr = cam.read()
+        frame_K = K.scaled_to(fr.bgr.shape[1], fr.bgr.shape[0])
+        frame_bgr = undistort_bgr(fr.bgr, frame_K)
         # Expected pixel size hint overlay
-        hint = fr.bgr.copy()
+        hint = frame_bgr.copy()
         exp_w = int(K.fx * args.box_w / args.target_m)
         exp_h = int(K.fy * args.box_h / args.target_m)
         cv2.putText(
@@ -334,12 +391,14 @@ def main() -> int:
         while time.monotonic() < t_end:
             f = cam.read()
             sc = lidar.get_scan()
-            frames.append(f.bgr)
+            frame_K = K.scaled_to(f.bgr.shape[1], f.bgr.shape[0])
+            frames.append(undistort_bgr(f.bgr, frame_K))
             for p in sc.points:
                 all_r.append(p.range_m)
                 all_a.append(math.radians(p.angle_deg))
             time.sleep(0.03)
         bgr = frames[len(frames) // 2]
+        K = K.scaled_to(bgr.shape[1], bgr.shape[0])
 
         # Median-filter dense polar by binning angles
         if not all_r:
@@ -355,7 +414,7 @@ def main() -> int:
             angles.append(math.radians(key / 2.0))
 
         cap = Capture(bgr=bgr, ranges=ranges, angles_rad=angles, roi=roi)
-        seed = Params(SEED_TX, SEED_TY, SEED_TZ, SEED_ROLL, SEED_PITCH, SEED_YAW)
+        seed = Params(args.seed_tx, args.seed_ty, args.seed_tz, 0.0, 0.0, 0.0)
         best, metrics = optimize(K, cap, seed, args.target_m, args.box_w)
 
         vis = visualize(K, cap, best, metrics)
@@ -374,10 +433,13 @@ def main() -> int:
             "method": "auto_practical_field_calibration",
             "frame": "lidar_xy_up__to__opencv_camera_optical",
             "fixture": {
-                "lidar_above_camera_m": 0.08,
-                "camera_forward_of_lidar_m": 0.03,
-                "lateral_m": 0.0,
-                "note": "ty negative because OpenCV Y is down; tz negative because LiDAR is behind camera",
+                "measured_seed_camera_frame_m": {
+                    "x": args.seed_tx,
+                    "y": args.seed_ty,
+                    "z": args.seed_tz,
+                },
+                "drawing": "docs/hardware/body.pdf",
+                "note": "Seed measured after final rigid assembly; not inferred from CAD alone",
             },
             "target": {
                 "distance_m": args.target_m,
@@ -393,7 +455,9 @@ def main() -> int:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-        out.with_suffix(".json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        out.with_suffix(".json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
         print("Saved →", out.resolve())
         return 0
     finally:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-One-command live demo: REAL LD19 + REAL USB camera + YOLO + dashboard.
+One-command live demo: real LD19 + Pi/IMX219 camera + YOLO + dashboard.
 
   python app.py
 
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -25,7 +24,11 @@ from fastapi.responses import HTMLResponse, Response
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from demo.defaults import default_lidar_port
+from demo.defaults import (
+    DEFAULT_EXTRINSICS_PATH,
+    DEFAULT_INTRINSICS_PATH,
+    default_lidar_port,
+)
 from demo.logger import DemoLogger
 from demo.perception import DemoPerception
 
@@ -165,7 +168,9 @@ async def _loop() -> None:
         cpu = psutil.cpu_percent(interval=None)
         payload = {
             "objects": snap.objects_dict(),
-            "lidar_xy": [[round(x, 3), round(y, 3), round(r, 3)] for x, y, r in snap.lidar_xy],
+            "lidar_xy": [
+                [round(x, 3), round(y, 3), round(r, 3)] for x, y, r in snap.lidar_xy
+            ],
             "closest_m": None if snap.closest_m is None else round(snap.closest_m, 3),
             "camera_fps": round(snap.camera_fps, 2),
             "lidar_hz": round(snap.lidar_hz, 2),
@@ -305,8 +310,8 @@ def main() -> None:
         default=default_lidar_port(),
         help="Serial port (default from config/demo_hardware.yaml, usually COM17)",
     )
-    parser.add_argument("--intrinsics", default="calibration/camera_intrinsics.yaml")
-    parser.add_argument("--extrinsics", default="calibration/lidar_camera_extrinsics.yaml")
+    parser.add_argument("--intrinsics", default=DEFAULT_INTRINSICS_PATH)
+    parser.add_argument("--extrinsics", default=DEFAULT_EXTRINSICS_PATH)
     ARGS = parser.parse_args()
     print(f"Dashboard: http://{ARGS.host}:{ARGS.port}")
     uvicorn.run(app, host=ARGS.host, port=ARGS.port, log_level="info")

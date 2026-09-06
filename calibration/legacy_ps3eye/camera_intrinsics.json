@@ -1,6 +1,7 @@
 {
   "image_width": 640,
   "image_height": 480,
+  "camera_model": "Sony PS3 Eye (legacy bench prototype)",
   "fx": 544.7544602330952,
   "fy": 547.904972296359,
   "cx": 298.40565044066534,
@@ -18,5 +19,5 @@
   "chessboard_cols": 9,
   "chessboard_rows": 6,
   "square_m": 0.025,
-  "note": "Real chessboard calibration"
+  "note": "Real chessboard calibration; invalid for IMX219-120"
 }

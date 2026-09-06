@@ -38,7 +38,7 @@ class HardwareInventory:
 
     @property
     def primary_camera_index(self) -> int | None:
-        # Prefer USB PS3 Eye (OpenCV index 1 on this PC) over laptop webcam (0).
+        # Prefer the configured external USB bench camera over the laptop webcam.
         preferred = 1
         for c in self.cameras:
             if c.ok and c.index == preferred:
@@ -146,11 +146,15 @@ def discover_hardware(max_camera_index: int = 2) -> HardwareInventory:
     if any(c.ok for c in cameras):
         ok_idxs = [c.index for c in cameras if c.ok]
         prefer = 1 if 1 in ok_idxs else ok_idxs[0]
-        recs.append(f"Use USB camera index {prefer} (prefer PS3 Eye over laptop webcam)")
+        recs.append(f"Local USB bench camera is available at OpenCV index {prefer}")
     else:
-        recs.append("No camera found — install opencv-python and check privacy permissions")
+        recs.append(
+            "No camera found — install opencv-python and check privacy permissions"
+        )
     if not lidar:
-        recs.append("No LiDAR serial device — running camera-only (no fake LiDAR in live UI)")
+        recs.append(
+            "No LiDAR serial device — running camera-only (no fake LiDAR in live UI)"
+        )
     else:
         recs.append(f"Possible LiDAR serial: {lidar[0]}")
     return HardwareInventory(

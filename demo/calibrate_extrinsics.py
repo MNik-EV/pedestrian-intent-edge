@@ -24,10 +24,19 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from amp_core.calibration.transforms import CameraIntrinsics, ExtrinsicTransform, lidar_polar_to_camera
-from demo.camera_live import LiveCamera
-from demo.defaults import default_camera_index, default_lidar_port
+from amp_core.calibration.transforms import (
+    CameraIntrinsics,
+    ExtrinsicTransform,
+    lidar_polar_to_camera,
+)
+from demo.camera_source import open_camera_source
+from demo.defaults import (
+    DEFAULT_EXTRINSICS_PATH,
+    DEFAULT_INTRINSICS_PATH,
+    default_lidar_port,
+)
 from demo.ld19_live import LD19Reader
+from demo.perception import undistort_bgr
 
 
 def load_intrinsics(path: Path) -> CameraIntrinsics:
@@ -50,14 +59,17 @@ def color_by_range(r: float, rmax: float = 4.0) -> tuple[int, int, int]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--camera", type=int, default=default_camera_index())
+    ap.add_argument(
+        "--camera", type=int, default=None, help="force a local USB camera index"
+    )
+    ap.add_argument("--camera-url", default=None, help="force a Pi MJPEG stream URL")
     ap.add_argument("--lidar-port", default=default_lidar_port())
-    ap.add_argument("--intrinsics", default="calibration/camera_intrinsics.yaml")
-    ap.add_argument("--out", default="calibration/lidar_camera_extrinsics.yaml")
-    # Fixture seed: LiDAR 8cm above (ty=-0.08), camera 3cm forward (tz=-0.03)
+    ap.add_argument("--intrinsics", default=DEFAULT_INTRINSICS_PATH)
+    ap.add_argument("--out", default=DEFAULT_EXTRINSICS_PATH)
+    # Measure these between the final mounted sensor centres in camera axes.
     ap.add_argument("--tx", type=float, default=0.0, help="camera-frame tx (right)")
-    ap.add_argument("--ty", type=float, default=-0.08, help="camera-frame ty (down); LiDAR above → negative")
-    ap.add_argument("--tz", type=float, default=-0.03, help="camera-frame tz (forward); LiDAR behind → negative")
+    ap.add_argument("--ty", type=float, default=0.0, help="camera-frame ty (down)")
+    ap.add_argument("--tz", type=float, default=0.0, help="camera-frame tz (forward)")
     ap.add_argument("--roll", type=float, default=0.0)
     ap.add_argument("--pitch", type=float, default=0.0)
     ap.add_argument("--yaw", type=float, default=0.0)
@@ -73,15 +85,22 @@ def main() -> int:
     roll, pitch, yaw = args.roll, args.pitch, args.yaw
     step_t, step_r = 0.005, 0.5
 
-    print(f"Using USB camera index {args.camera} (not laptop webcam)")
-    cam = LiveCamera(args.camera, width=K.width, height=K.height)
+    cam = open_camera_source(
+        camera_index=args.camera,
+        camera_url=args.camera_url,
+        width=K.width,
+        height=K.height,
+    )
+    print(f"Using camera source {type(cam).__name__}")
     cam.start()
     lidar = LD19Reader(port=args.lidar_port)
     lidar.start()
 
     print("Keys: W/X tx  A/D ty  R/F tz  I/K pitch  J/L yaw  U/O roll")
     print("      [/] step size   S save   Q quit")
-    print("Method: PRACTICAL FIELD CALIBRATION (ruler + visual nudge), not formal optimization.")
+    print(
+        "Method: PRACTICAL FIELD CALIBRATION (ruler + visual nudge), not formal optimization."
+    )
 
     try:
         while True:
@@ -92,8 +111,9 @@ def main() -> int:
             )
             ranges = [p.range_m for p in sc.points]
             angles = [math.radians(p.angle_deg) for p in sc.points]
-            proj = lidar_polar_to_camera(ranges, angles, ext, K, z_plane=0.0)
-            vis = fr.bgr.copy()
+            frame_K = K.scaled_to(fr.bgr.shape[1], fr.bgr.shape[0])
+            proj = lidar_polar_to_camera(ranges, angles, ext, frame_K, z_plane=0.0)
+            vis = undistort_bgr(fr.bgr, frame_K).copy()
             for u, v, r in proj:
                 cv2.circle(vis, (int(u), int(v)), 2, color_by_range(r), -1)
             cv2.putText(
@@ -164,8 +184,12 @@ def main() -> int:
                 }
                 out = Path(args.out)
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-                out.with_suffix(".json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                out.write_text(
+                    yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
+                )
+                out.with_suffix(".json").write_text(
+                    json.dumps(payload, indent=2), encoding="utf-8"
+                )
                 print("Saved ->", out.resolve())
     finally:
         cam.stop()

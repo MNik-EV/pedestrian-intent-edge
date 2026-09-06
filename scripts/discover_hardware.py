@@ -79,7 +79,7 @@ def main() -> int:
         "network": _network(),
         "recommendations": inv.recommendations,
         "notes": [
-            "Laptop webcam is used automatically when LD19/PS3 Eye are absent.",
+            "This local probe does not discover the Pi MJPEG camera; configure its URL in config/demo_hardware.yaml.",
             "LiDAR points are NOT faked when no serial LiDAR is found.",
             "Object distance without LiDAR uses monocular size geometry (approximate).",
         ],

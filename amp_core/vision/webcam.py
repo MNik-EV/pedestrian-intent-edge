@@ -1,4 +1,4 @@
-"""Live webcam capture via OpenCV (PC laptop or PS3 Eye / UVC)."""
+"""Live local USB-camera capture via OpenCV (bench fallback)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from amp_core.common.types import ImageFrame, Timestamp
 
 @dataclass
 class WebcamConfig:
-    # Default is USB PS3 Eye on this PC (see config/demo_hardware.yaml).
+    # Used only when the bench USB fallback is explicitly selected.
     index: int = 1
     width: int = 640
     height: int = 480
@@ -66,7 +66,6 @@ class WebcamCapture:
         if self._cap is None:
             return None
         import cv2  # type: ignore
-        import numpy as np
 
         ok, frame = self._cap.read()
         if not ok or frame is None:

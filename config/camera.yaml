@@ -1,21 +1,22 @@
 camera:
-  driver: ps3eye  # v4l2 | ps3eye | mock
-  # Windows OpenCV index for USB PS3 Eye (not laptop webcam). Pi: /dev/video*
+  driver: network_mjpeg  # primary: Pi Zero 2W picamera2 relay
+  model: IMX219-120
+  transport: http_mjpeg
+  stream_url: http://raspberrypi.local:8000/stream.mjpg
+  # Bench-only USB fallback; index 1 was the PS3 Eye on the development laptop.
   device_index: 1
-  device: /dev/video0
-  # PS3 Eye typical: 640x480 @ 30/60
   width: 640
   height: 480
-  fps: 30
+  fps: 15
   frame_id: camera
   encoding: bgr8
   exposure: auto
   gain: auto
   undistort: false
-  calibration_file: calibration/camera_intrinsics.yaml
+  calibration_file: calibration/imx219_intrinsics.yaml
 
 preprocessing:
-  grayscale: true
+  grayscale: false
   resize_width: 640
   resize_height: 480
 

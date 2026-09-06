@@ -1,34 +1,20 @@
 # Deployment
 
-## Release build (PC / CI)
+## Implemented deployment
 
-```bash
-./scripts/build_release.sh
-# → dist/robot_release_<version>.tar.gz
-```
+The deployed thesis system has two processes:
 
-## Pi install order
+1. Pi Zero 2W: `edge/camera_streamer.py`, optionally managed by
+   `edge/systemd/amp-camera-stream.service`.
+2. Laptop: `python demo_show.py` (or `python app.py`) with the LD19 connected locally.
 
-1. `sudo ./install.sh` — venv, deps, copy app, enable systemd  
-2. `sudo ./configure.sh` — generate `/etc/amp-robot.env` token  
-3. `./health_check.sh`  
-4. `sudo systemctl start robot.service`  
-5. `systemctl status robot_core robot_web robot_logger robot_monitor`
+Before presentation, verify the stream from a browser, run
+`python demo/verify_sensors.py --seconds 10`, confirm current IMX219 calibration files,
+and perform a known-distance sanity check. Use a trusted/private LAN because the MJPEG
+stream is intentionally unauthenticated.
 
-## Services
+## Future ROS2 deployment assets
 
-| Unit | Role |
-|------|------|
-| `robot.service` | Aggregate |
-| `robot_core.service` | Perception / fusion / safety loop |
-| `robot_web.service` | Dashboard + API |
-| `robot_logger.service` | Structured logs |
-| `robot_monitor.service` | CPU/RAM/temp |
-
-Restarts use `Restart=on-failure` with `StartLimitBurst` to avoid restart loops.
-
-## Security
-
-- Control endpoints require `Authorization: Bearer <AMP_CONTROL_TOKEN>`
-- Token stored in `/etc/amp-robot.env` (mode 600), never in git
-- Telemetry read APIs remain separable from control
+The top-level `deployment/` units and `ros2_ws/` packages describe a future Raspberry Pi
+5/Ubuntu/ROS2 robot runtime. They are retained for extensibility but are scaffold code,
+not the tested deployment described above.

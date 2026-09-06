@@ -1,13 +1,15 @@
 # Troubleshooting
 
 | Symptom | Check |
-|---------|-------|
-| No LiDAR | `discover_hardware.py`, serial permissions (`dialout`), `lidar.yaml` port |
-| No camera | `/dev/video*`, UVC quirks for PS3 Eye, exclusive device lock |
-| Dashboard unreachable | `robot_web` status, firewall, bind `0.0.0.0:8000` |
-| Constant ESTOP | Obstacle too close, LiDAR timeout, clear via `/api/navigation/clear_estop` |
-| High CPU on Pi | Lower camera FPS, use stub/onnx-lite detector, enable frame skip |
-| Auth 403 | Token mismatch with `/etc/amp-robot.env` |
-| ROS2 build fails on Windows | Expected — use Ubuntu/Pi or mock stack |
+|---|---|
+| Pi reports no camera | Ribbon orientation, connector latch, `rpicam-hello --list-cameras`, current Pi OS packages |
+| Laptop cannot open stream | Pi/laptop subnet, hostname resolution, firewall, URL, and `http://<pi-ip>:8000/` in a browser |
+| Stream freezes/reconnects | Reduce Pi FPS/JPEG quality, improve Wi-Fi, use IP instead of mDNS, inspect service log |
+| No LD19 | USB–UART driver, port name, 230400 baud, wiring/power, exclusive port lock |
+| Overlay is shifted | IMX219 calibration profile, unchanged resolution, measured seed signs, rigid mount, rerun extrinsics |
+| Edge overlay bends | Repeat wide-angle intrinsic calibration with chessboard corners near image edges |
+| Wrong object range | Verify scan plane crosses the object, reject reflective/glass cases, inspect LiDAR cluster count and fusion confidence |
+| YOLO unavailable | Install `ultralytics`; check `yolov8n.pt`; the app reports the selected fallback backend |
 
-Logs: `journalctl -u robot_core -u robot_web -f` and `experiments/*/events.jsonl`.
+Run `python demo/verify_sensors.py --seconds 10` first. It writes
+`hardware_live_report.json` with the actual source, rates, port, point count, and error.

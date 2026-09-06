@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import numpy as np
 import yaml
 
 from amp_core.calibration.distance_fusion import fuse_detections_distances
@@ -19,13 +20,13 @@ from amp_core.calibration.transforms import (
 )
 from amp_core.detection.backends import DetectorConfig, create_detector
 from demo.camera_source import open_camera_source
+from demo.defaults import DEFAULT_EXTRINSICS_PATH, DEFAULT_INTRINSICS_PATH
 from demo.ld19_live import LD19Reader
 
 
 def load_intrinsics(path: Path) -> CameraIntrinsics:
     if not path.exists():
-        # Temporary defaults until chessboard calib is run — clearly marked
-        return CameraIntrinsics(500.0, 500.0, 320.0, 240.0, 640, 480)
+        raise FileNotFoundError(f"Missing camera calibration: {path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return CameraIntrinsics(
         fx=float(data["fx"]),
@@ -34,6 +35,7 @@ def load_intrinsics(path: Path) -> CameraIntrinsics:
         cy=float(data["cy"]),
         width=int(data.get("image_width", 640)),
         height=int(data.get("image_height", 480)),
+        dist_coeffs=tuple(float(x) for x in data.get("distortion", [0, 0, 0, 0, 0])),
     )
 
 
@@ -44,7 +46,7 @@ def load_extrinsics(path: Path) -> ExtrinsicTransform:
     camera frame (identity RPY previously projected NOTHING).
     """
     if not path.exists():
-        return ExtrinsicTransform.lidar_to_camera_optical(tx=0.0, ty=-0.08, tz=-0.03)
+        raise FileNotFoundError(f"Missing camera–LiDAR calibration: {path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return ExtrinsicTransform.lidar_to_camera_optical(
         tx=float(data.get("x", data.get("tx", 0.0))),
@@ -59,6 +61,23 @@ def load_extrinsics(path: Path) -> ExtrinsicTransform:
 def color_by_range(r: float, rmax: float = 4.0) -> tuple[int, int, int]:
     t = max(0.0, min(1.0, r / rmax))
     return (int(255 * t), int(80), int(255 * (1 - t)))
+
+
+def undistort_bgr(bgr: np.ndarray, K: CameraIntrinsics) -> np.ndarray:
+    """Return an image matching the pinhole model used by projection."""
+    if not any(abs(v) > 1e-12 for v in K.dist_coeffs):
+        return bgr
+    camera_matrix = np.array(
+        [[K.fx, 0.0, K.cx], [0.0, K.fy, K.cy], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    return cv2.undistort(
+        bgr,
+        camera_matrix,
+        np.asarray(K.dist_coeffs, dtype=np.float64),
+        None,
+        camera_matrix,
+    )
 
 
 @dataclass
@@ -93,12 +112,16 @@ class DemoSnapshot:
                 {
                     "class": o.class_name,
                     "confidence": round(o.confidence, 3),
-                    "distance_m": None if o.distance_m is None else round(o.distance_m, 3),
+                    "distance_m": None
+                    if o.distance_m is None
+                    else round(o.distance_m, 3),
                     "bearing_deg": round(o.bearing_deg, 2),
                     "lidar_points": o.lidar_points_in_box,
                     "fusion": o.fusion_method,
                     "fusion_conf": round(o.fusion_conf, 2),
-                    "mono_prior_m": None if o.mono_prior_m is None else round(o.mono_prior_m, 2),
+                    "mono_prior_m": None
+                    if o.mono_prior_m is None
+                    else round(o.mono_prior_m, 2),
                     "bbox": {
                         "x1": o.bbox.x1,
                         "y1": o.bbox.y1,
@@ -118,23 +141,29 @@ class DemoPerception:
         camera_index: int | None = None,
         camera_url: str | None = None,
         lidar_port: str | None = None,
-        intrinsics_path: str = "calibration/camera_intrinsics.yaml",
-        extrinsics_path: str = "calibration/lidar_camera_extrinsics.yaml",
+        intrinsics_path: str = DEFAULT_INTRINSICS_PATH,
+        extrinsics_path: str = DEFAULT_EXTRINSICS_PATH,
     ) -> None:
         self.notes: list[str] = []
         ip = Path(intrinsics_path)
         ep = Path(extrinsics_path)
-        if not ip.exists():
-            self.notes.append("intrinsics missing — using temporary fx/fy defaults")
-        else:
-            self.notes.append("intrinsics: loaded")
-        if not ep.exists():
-            self.notes.append("extrinsics missing — using fixture ruler defaults")
-        else:
-            self.notes.append("extrinsics: loaded")
-        self.notes.append("distance: bearing-gated LiDAR fusion (+ person height prior)")
+        missing = [str(path) for path in (ip, ep) if not path.exists()]
+        if missing:
+            raise RuntimeError(
+                "Final IMX219 calibration is required before fused ranging. Missing: "
+                + ", ".join(missing)
+                + ". Run demo/calibrate_intrinsics.py and then "
+                "demo/auto_calibrate_extrinsics.py; legacy PS3 Eye values are invalid."
+            )
+        self.notes.append("IMX219 intrinsics: loaded")
+        self.notes.append("IMX219↔LD19 extrinsics: loaded")
+        self.notes.append(
+            "distance: bearing-gated LiDAR fusion (+ person height prior)"
+        )
 
         self.K = load_intrinsics(ip)
+        if any(abs(v) > 1e-12 for v in self.K.dist_coeffs):
+            self.notes.append("lens distortion: corrected before detection/projection")
         self.ext = load_extrinsics(ep)
         self.camera = open_camera_source(
             camera_index=camera_index,
@@ -172,24 +201,26 @@ class DemoPerception:
         fr = self.camera.read()
         sc = self.lidar.get_scan()
         h, w = fr.bgr.shape[:2]
+        K = self.K.scaled_to(w, h)
+        bgr = undistort_bgr(fr.bgr, K)
 
         t0 = time.perf_counter()
-        dets = self.detector.detect(fr.bgr.tobytes(), w, h, 3)
+        dets = self.detector.detect(bgr.tobytes(), w, h, 3)
         detect_ms = (time.perf_counter() - t0) * 1000.0
 
         ranges = [p.range_m for p in sc.points]
         angles = [math.radians(p.angle_deg) for p in sc.points]
-        projected = lidar_polar_to_camera(ranges, angles, self.ext, self.K, z_plane=0.0)
+        projected = lidar_polar_to_camera(ranges, angles, self.ext, K, z_plane=0.0)
 
         fused = fuse_detections_distances(
             [(d.bbox, d.class_name, float(d.confidence)) for d in dets],
             ranges,
             angles,
             self.ext,
-            self.K,
+            K,
         )
 
-        vis = fr.bgr.copy()
+        vis = bgr.copy()
         for u, v, r in projected:
             if r <= 4.5:
                 cv2.circle(vis, (int(u), int(v)), 2, color_by_range(r), -1)
@@ -222,7 +253,13 @@ class DemoPerception:
             else:
                 label = f"{d.class_name}  no-lidar"
             cv2.putText(
-                vis, label, (x1, max(18, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (245, 245, 245), 2
+                vis,
+                label,
+                (x1, max(18, y1 - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.58,
+                (245, 245, 245),
+                2,
             )
             cx = int(d.bbox.cx)
             cv2.line(vis, (cx, y2), (cx, min(h - 1, y2 + 18)), color, 2)

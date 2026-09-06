@@ -14,7 +14,7 @@ work, not part of the implemented/tested thesis system.
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __title__ = "Adaptive Multimodal Perception and Sensor Fusion"
 
 VERSION = __version__

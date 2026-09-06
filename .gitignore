@@ -19,3 +19,4 @@ web_dashboard/frontend/dist/
 .DS_Store
 .env
 /etc/
+.claude/

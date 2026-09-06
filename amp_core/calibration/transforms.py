@@ -17,6 +17,22 @@ class CameraIntrinsics:
     height: int
     dist_coeffs: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0)
 
+    def scaled_to(self, width: int, height: int) -> "CameraIntrinsics":
+        """Scale the calibration matrix when stream resolution changes."""
+        if width == self.width and height == self.height:
+            return self
+        sx = width / max(1, self.width)
+        sy = height / max(1, self.height)
+        return CameraIntrinsics(
+            fx=self.fx * sx,
+            fy=self.fy * sy,
+            cx=self.cx * sx,
+            cy=self.cy * sy,
+            width=width,
+            height=height,
+            dist_coeffs=self.dist_coeffs,
+        )
+
     def project(self, X: float, Y: float, Z: float) -> tuple[float, float] | None:
         """Project a 3D camera-frame point to pixel coordinates."""
         if Z <= 1e-6:
@@ -46,7 +62,9 @@ class ExtrinsicTransform:
     ty: float = 0.0
     tz: float = 0.0
 
-    def transform_point(self, x: float, y: float, z: float) -> tuple[float, float, float]:
+    def transform_point(
+        self, x: float, y: float, z: float
+    ) -> tuple[float, float, float]:
         X = self.r00 * x + self.r01 * y + self.r02 * z + self.tx
         Y = self.r10 * x + self.r11 * y + self.r12 * z + self.ty
         Z = self.r20 * x + self.r21 * y + self.r22 * z + self.tz

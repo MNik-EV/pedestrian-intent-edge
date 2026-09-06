@@ -20,18 +20,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from demo.camera_live import LiveCamera
-from demo.defaults import default_camera_index
+from demo.camera_source import open_camera_source
+from demo.defaults import DEFAULT_INTRINSICS_PATH
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--camera", type=int, default=default_camera_index())
+    ap.add_argument(
+        "--camera", type=int, default=None, help="force a local USB camera index"
+    )
+    ap.add_argument("--camera-url", default=None, help="force a Pi MJPEG stream URL")
     ap.add_argument("--cols", type=int, default=9, help="inner corners along width")
     ap.add_argument("--rows", type=int, default=6, help="inner corners along height")
     ap.add_argument("--square", type=float, default=0.025, help="square size meters")
     ap.add_argument("--shots", type=int, default=20)
-    ap.add_argument("--out", default="calibration/camera_intrinsics.yaml")
+    ap.add_argument("--out", default=DEFAULT_INTRINSICS_PATH)
+    ap.add_argument("--camera-model", default="IMX219-120")
     args = ap.parse_args()
 
     pattern = (args.cols, args.rows)
@@ -39,13 +43,15 @@ def main() -> int:
     objp[:, :2] = np.mgrid[0 : args.cols, 0 : args.rows].T.reshape(-1, 2)
     objp *= args.square
 
-    print(f"Using USB camera index {args.camera} (not laptop webcam)")
-    cam = LiveCamera(args.camera)
+    cam = open_camera_source(camera_index=args.camera, camera_url=args.camera_url)
+    print(f"Using camera source {type(cam).__name__}")
     cam.start()
     obj_points: list[np.ndarray] = []
     img_points: list[np.ndarray] = []
     last_capture = 0.0
-    print(f"Show chessboard ({args.cols}x{args.rows} inner corners). Need {args.shots} shots.")
+    print(
+        f"Show chessboard ({args.cols}x{args.rows} inner corners). Need {args.shots} shots."
+    )
     print("Press q to abort.")
 
     try:
@@ -112,16 +118,22 @@ def main() -> int:
         "chessboard_cols": args.cols,
         "chessboard_rows": args.rows,
         "square_m": args.square,
-        "note": "Real chessboard calibration",
+        "camera_model": args.camera_model,
+        "source": type(cam).__name__,
+        "note": "Real chessboard calibration at the configured stream resolution",
     }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(yaml.safe_dump(result, sort_keys=False), encoding="utf-8")
-    (out.with_suffix(".json")).write_text(json.dumps(result, indent=2), encoding="utf-8")
+    (out.with_suffix(".json")).write_text(
+        json.dumps(result, indent=2), encoding="utf-8"
+    )
     print("\n=== Intrinsic calibration result ===")
     print(f"OpenCV RMS: {rms:.4f} px")
     print(f"Mean reprojection error: {mean_reproj:.4f} px")
-    print(f"fx={result['fx']:.2f} fy={result['fy']:.2f} cx={result['cx']:.2f} cy={result['cy']:.2f}")
+    print(
+        f"fx={result['fx']:.2f} fy={result['fy']:.2f} cx={result['cx']:.2f} cy={result['cy']:.2f}"
+    )
     print("Saved", out.resolve())
     return 0
 

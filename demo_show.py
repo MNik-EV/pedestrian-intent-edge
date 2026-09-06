@@ -28,7 +28,11 @@ from fastapi.responses import HTMLResponse, Response
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from demo.defaults import default_lidar_port
+from demo.defaults import (
+    DEFAULT_EXTRINSICS_PATH,
+    DEFAULT_INTRINSICS_PATH,
+    default_lidar_port,
+)
 from demo.logger import DemoLogger
 from demo.perception import DemoPerception
 
@@ -264,7 +268,9 @@ class ShowcaseEngine:
             )
         self.ext_data = {}
         if self.extrinsics_path.exists():
-            self.ext_data = yaml.safe_load(self.extrinsics_path.read_text(encoding="utf-8")) or {}
+            self.ext_data = (
+                yaml.safe_load(self.extrinsics_path.read_text(encoding="utf-8")) or {}
+            )
 
     @property
     def detector(self):
@@ -287,16 +293,22 @@ class ShowcaseEngine:
             ),
             f"<b>Extrinsics</b>: {method}",
             (
-                f"t=({e.get('x',0):.3f}, {e.get('y',0):.3f}, {e.get('z',0):.3f}) m · "
-                f"rpy=({e.get('roll_deg',0):.1f}, {e.get('pitch_deg',0):.1f}, {e.get('yaw_deg',0):.1f})°"
+                f"t=({e.get('x', 0):.3f}, {e.get('y', 0):.3f}, {e.get('z', 0):.3f}) m · "
+                f"rpy=({e.get('roll_deg', 0):.1f}, {e.get('pitch_deg', 0):.1f}, {e.get('yaw_deg', 0):.1f})°"
             ),
             "<b>Distance</b>: bearing-gated LiDAR fusion + person height prior (to 4.5 m)",
         ]
         if range_err is not None:
-            cls = "oktxt" if range_err <= 0.08 else "warntxt" if range_err <= 0.15 else "badtxt"
+            cls = (
+                "oktxt"
+                if range_err <= 0.08
+                else "warntxt"
+                if range_err <= 0.15
+                else "badtxt"
+            )
             bits.append(
                 f"<b>Box-target residual</b>: <span class='{cls}'>{range_err:.3f} m</span>"
-                f" · overlay inside {(frac or 0)*100:.0f}%"
+                f" · overlay inside {(frac or 0) * 100:.0f}%"
             )
         bits.append(
             "<span class='warntxt'>Honest scope</span>: practical field calibration "
@@ -356,8 +368,12 @@ async def _loop() -> None:
         jpeg = snap["jpeg"] or b""
         payload = {
             "objects": snap["objects"],
-            "lidar_xy": [[round(x, 3), round(y, 3), round(r, 3)] for x, y, r in snap["lidar_xy"]],
-            "closest_m": None if snap["closest_m"] is None else round(snap["closest_m"], 3),
+            "lidar_xy": [
+                [round(x, 3), round(y, 3), round(r, 3)] for x, y, r in snap["lidar_xy"]
+            ],
+            "closest_m": None
+            if snap["closest_m"] is None
+            else round(snap["closest_m"], 3),
             "camera_fps": round(snap["camera_fps"], 2),
             "lidar_hz": round(snap["lidar_hz"], 2),
             "detect_ms": round(snap["detect_ms"], 1),
@@ -455,8 +471,8 @@ def main() -> None:
         help="Force network camera.mode with this MJPEG URL (overrides config/demo_hardware.yaml)",
     )
     p.add_argument("--lidar-port", default=default_lidar_port())
-    p.add_argument("--intrinsics", default="calibration/camera_intrinsics.yaml")
-    p.add_argument("--extrinsics", default="calibration/lidar_camera_extrinsics.yaml")
+    p.add_argument("--intrinsics", default=DEFAULT_INTRINSICS_PATH)
+    p.add_argument("--extrinsics", default=DEFAULT_EXTRINSICS_PATH)
     ARGS = p.parse_args()
     print(f"Showcase dashboard: http://{ARGS.host}:{ARGS.port}")
     uvicorn.run(app, host=ARGS.host, port=ARGS.port, log_level="info")

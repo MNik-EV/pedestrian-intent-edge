@@ -1,65 +1,106 @@
-# AMP Robot
+# Real-Time LD19–IMX219 Sensor Fusion
 
-**Adaptive Multimodal Perception and Sensor Fusion for Robust Low-Cost Autonomous Indoor Robots**
+Bachelor's thesis implementation for semantic object detection and metric ranging with a
+low-cost camera–LiDAR pair. An IMX219-120 CSI camera is captured by a Raspberry Pi Zero
+2W and streamed to a laptop; an LD19 2D LiDAR connects directly to the laptop over
+USB–serial. The laptop runs detection, geometric fusion, tracking, logging, and the live
+FastAPI dashboard.
 
-Research-grade software stack for a Raspberry Pi 5 mobile robot with LD19 LiDAR, PS3 Eye camera, and optional IMU / encoders / motor controller.
+## Implemented scope
 
-## PC ≠ Pi
+| Component | Status |
+|---|---|
+| Pi Zero 2W camera relay (`picamera2` → MJPEG/HTTP) | Implemented; physical Pi test required |
+| Laptop MJPEG client with reconnect | Implemented and locally integration-tested |
+| LD19 packet parsing, CRC8, and 360° scan assembly | Implemented and previously hardware-tested |
+| YOLOv8n detection with OpenCV fallbacks | Implemented |
+| LiDAR–camera projection and robust object ranging | Implemented |
+| Live dashboard and JSONL experiment logging | Implemented |
+| IMX219 intrinsic and final-rig extrinsic calibration | Tools ready; values must be measured on the final assembly |
+| ROS2, SLAM, navigation, and motor control | Future-work scaffold; not claimed as validated |
 
-| Machine | Role |
-|---------|------|
-| **PC** | Development, tests, simulation, mock sensors, dataset processing, model training, offline evaluation, plots, paper experiments |
-| **Raspberry Pi 5** | Real-time runtime: drivers, lightweight perception, adaptive fusion, SLAM, navigation, safety, dashboard, logging |
+No accuracy number is claimed until the experiments in `paper/experimental_setup.md` are
+run with measured ground truth. Legacy PS3 Eye calibration and evidence are retained under
+`calibration/legacy_ps3eye/` and `experiments/`; they are not valid for the IMX219.
 
-Everything visible live on the dashboard is **recordable and replayable** under an `experiment_id` for fair method comparisons (LiDAR-only vs fixed fusion vs adaptive fusion ± dynamic filtering).
+## Architecture
 
-## Quick start (Windows / PC mock — no ROS2 required)
+```text
+IMX219-120 --CSI--> Pi Zero 2W --MJPEG/Wi-Fi--┐
+                                               ├--> laptop: YOLO + fusion + dashboard + logs
+LD19 --------USB serial------------------------┘
+```
+
+The Pi is deliberately a camera relay only. It does not run AI or fusion. This keeps the
+512 MB Zero 2W responsive and makes the laptop the single processing host. See
+[the architecture document](docs/ARCHITECTURE.md) for the full data flow.
+
+## Quick start
+
+Requirements: Python 3.11+ on the laptop, Raspberry Pi OS Lite 64-bit on the Pi, and both
+devices on the same network.
 
 ```bash
 python -m pip install -r requirements.txt
-python scripts/discover_hardware.py
-python -m pytest tests -q
-python scripts/run_mock_stack.py
+python -m pip install -e .
+python -m pytest -q
 ```
 
-Open http://127.0.0.1:8000 — control token default: `dev-token-change-me`
+1. Configure and start the Pi streamer using [edge/README.md](edge/README.md).
+2. Put the Pi URL and LD19 serial port in `config/demo_hardware.yaml`.
+3. Check the real links:
 
-Record / evaluate:
+   ```bash
+   python demo/verify_sensors.py --seconds 10
+   ```
 
-```bash
-python scripts/record_experiment.py --seconds 10 --mode adaptive_fusion
-python evaluation/run_experiment.py --experiment experiments/EXP_...
-python evaluation/generate_report.py --experiment experiments/EXP_...
-```
+4. Calibrate the IMX219 at the exact streaming resolution, then calibrate the rigid
+   camera–LiDAR transform using [docs/CALIBRATION.md](docs/CALIBRATION.md).
+5. Start the presentation dashboard:
 
-## Raspberry Pi 5 (ROS2 Jazzy + runtime)
+   ```bash
+   python demo_show.py
+   ```
 
-See [docs/INSTALLATION.md](docs/INSTALLATION.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Open <http://127.0.0.1:8000>. `python app.py` starts the simpler live dashboard. To use a
+temporary USB bench camera, pass `--camera 1` or set `camera.mode: usb`; its calibration
+must be supplied separately.
 
-```bash
-./scripts/build_release.sh
-# copy dist/robot_release_*.tar.gz to Pi
-sudo ./install.sh && sudo ./configure.sh
-sudo systemctl start robot.service
-# http://<PI_IP>:8000
-```
+## Fusion summary
 
-## Research modes
+The camera supplies semantics and bounding boxes. Calibrated intrinsics convert each box
+to a horizontal bearing interval. LD19 returns are transformed into the camera frame,
+gated by bearing and image location, clustered by depth, and associated uniquely to
+detections. A robust front-surface percentile estimates range. A class-size monocular
+prior is used only as a weak disambiguation/fallback cue, not as ground truth. Lens
+distortion is removed before detection/projection when calibration coefficients exist.
 
-- `lidar_only` / `camera_only` / `fixed_fusion` / `adaptive_fusion` / `adaptive_fusion_dynfilter`
+## Repository map
 
-Metrics (ATE, RPE, …) are **NOT YET MEASURED** until controlled experiments with ground truth are run. Do not treat placeholders as results.
+| Path | Purpose |
+|---|---|
+| `edge/` | Pi Zero 2W camera relay and systemd unit |
+| `demo/`, `app.py`, `demo_show.py` | Real-hardware validation path |
+| `amp_core/` | ROS-agnostic detection, geometry, fusion, tracking, reliability, and mocks |
+| `calibration/` | Generated IMX219 profiles and archived legacy profiles |
+| `tests/` | Hardware-free unit/integration tests |
+| `paper/` | Thesis chapter skeleton, method, protocol, and result templates |
+| `experiments/`, `evaluation/` | Recorded evidence and offline metrics/report tools |
+| `ros2_ws/`, `deployment/`, `simulation/` | Explicit future-work scaffold |
+
+## Reproducible research modes
+
+The controlled mock harness supports `lidar_only`, `camera_only`, `fixed_fusion`,
+`adaptive_fusion`, and `adaptive_fusion_dynfilter` for labeled degradation/ablation
+experiments. It is separate from the real-sensor demo and must not be presented as real
+hardware evidence.
 
 ## Documentation
 
-| Doc | Path |
-|-----|------|
-| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Implementation plan | [PROJECT_IMPLEMENTATION_PLAN.md](PROJECT_IMPLEMENTATION_PLAN.md) |
-| Final system report | [FINAL_SYSTEM_REPORT.md](FINAL_SYSTEM_REPORT.md) |
-| API | [docs/API.md](docs/API.md) |
-| Research protocol | [docs/RESEARCH_PROTOCOL.md](docs/RESEARCH_PROTOCOL.md) |
-
-## License
+- [Hardware and wiring](docs/HARDWARE.md)
+- [Calibration](docs/CALIBRATION.md)
+- [Experiment protocol](paper/experimental_setup.md)
+- [Current system report](FINAL_SYSTEM_REPORT.md)
+- [Pi camera setup](edge/README.md)
 
 Apache-2.0 — see [LICENSE](LICENSE).

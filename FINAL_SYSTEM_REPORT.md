@@ -1,76 +1,76 @@
-# Final System Report
+# Current system report
 
-**Project:** Adaptive Multimodal Perception and Sensor Fusion for Robust Low-Cost Autonomous Indoor Robots  
-**Software version:** 0.1.0-research  
-**Date:** 2026-08-08  
+**Project:** Real-Time LiDAR–Camera Fusion for Object-Aware Ranging
 
-## Architecture
+**Software version:** 0.2.0-thesis
+**Updated:** 2026-09-06
 
-Modular stack with ROS-agnostic `amp_core` algorithms, ROS2 Jazzy package wrappers for Raspberry Pi 5, and a FastAPI/WebSocket control-center dashboard. PC hosts development, mocks, training, and offline evaluation; Pi hosts real-time runtime and safety.
+## Outcome
 
-## Hardware
+The implemented system combines a networked IMX219-120 camera with a laptop-connected
+LD19. It detects objects, associates planar LiDAR returns with image detections, estimates
+metric range, visualizes both modalities, and records experiment telemetry. The Pi Zero 2W
+is a camera bridge; AI and fusion run on the laptop.
 
-Baseline: Raspberry Pi 5, LD19, PS3 Eye; optional IMU, encoders, motor controller via `config/robot.yaml`. Development PC environment (Windows 11) had no WSL/Docker/ROS2 and no LD19/PS3 Eye attached at scaffold time — mock sensors validate software paths.
+## Implemented software
 
-## Software
+- Pi `picamera2` MJPEG streamer and boot service
+- reconnecting laptop stream client
+- real LD19 serial parser with official CRC8 table and full-scan assembly
+- YOLOv8n plus real OpenCV detector fallbacks
+- image undistortion, coordinate transformation, bearing gating, depth clustering,
+  unique point reservation, robust range estimation, and labeled monocular fallback
+- IOU/motion-evidence object tracker
+- FastAPI/WebSocket presentation dashboard and JSONL experiment logger
+- intrinsic and practical target-based extrinsic calibration tools supporting the Pi stream
+- hardware-free unit/integration suite and controlled mock/ablation harness
 
-- Python 3.11+ `amp_core` (LiDAR processing, vision quality, detector backends, MOT, reliability, adaptive EKF, dynamic filter, safety, navigation, SLAM mock, degradation injection, experiment logging)
-- `web_dashboard` live UI (camera overlays, LiDAR radar, map, objects, distances, fusion, teleop)
-- `ros2_ws/src/*` ament_python packages
-- `evaluation/` ATE/RPE + HTML report generator
-- systemd units for Pi deployment
+## Physical evidence and calibration status
 
-## Algorithms (summary)
+The repository contains prior LD19 + USB-camera bring-up logs and a real PS3 Eye
+chessboard calibration. Those prove earlier software/hardware integration but do not
+calibrate the final IMX219 rig. They are archived under `experiments/` and
+`calibration/legacy_ps3eye/`.
 
-- Heuristic sensor reliability from measurable features (fixed / heuristic / learned interface)
-- Bounded covariance adaptation for EKF updates
-- Temporal motion evidence for dynamic vs static tracks
-- LiDAR–camera projection + median-range association for object depth
+The final IMX219 and bracket cannot be tested from this development session because no SSH
+or physical sensor access was supplied. The scripts, profiles, and protocol are ready for
+the owner to run. Until then:
 
-## Data flow
+- IMX219 intrinsic values: **NOT YET MEASURED**
+- final-rig camera–LiDAR extrinsics: **NOT YET MEASURED**
+- final distance/latency/robustness metrics: **NOT YET MEASURED**
 
-Sensors → perception → reliability → adaptive fusion → (optional) dynamic filter → SLAM → navigation → **safety supervisor** → motors; telemetry → dashboard + experiment store.
+## Algorithm claim
 
-## Installation / deployment
-
-See `docs/INSTALLATION.md`, `docs/DEPLOYMENT.md`. Release via `scripts/build_release.sh`.
-
-## Performance
-
-**NOT YET MEASURED** on Raspberry Pi 5 hardware. PC mock tests exercise functional paths only.
+The camera provides semantic detections while LiDAR provides metric depth. For each
+detection, the algorithm computes its calibrated bearing span, selects projected LiDAR
+returns, clusters candidate depths, selects a cluster using geometric support and a weak
+class-size prior, and reports a robust front-surface range and confidence. This addresses
+camera-only scale ambiguity and LiDAR-only lack of semantics. It does not create depth when
+both sensors lack evidence.
 
 ## Known limitations
 
-- LD19 low-level serial reader requires hardware bring-up verification against firmware CRC/packet docs
-- ONNX detector requires a calibrated exported model; stub backend used for CI/mock
-- Occupancy mock SLAM is for integration; production Pi should bind `slam_toolbox` / Cartographer via `slam_integration`
-- Windows PC cannot `colcon build` without WSL/Ubuntu
-- No fabricated accuracy claims
+- MJPEG over Wi-Fi has variable transport latency and no hardware synchronization.
+- A 2D LiDAR measures only one horizontal plane; small/high/low objects may not intersect it.
+- Wide-angle calibration quality strongly affects edge projection.
+- Pretrained COCO classes may not match every thesis object or local scene.
+- Class-size monocular priors vary with object instance and pose.
+- The practical extrinsic optimizer is not multi-pose metrology.
 
-## Research contribution
+## Scope boundary
 
-Platform enables controlled comparison of adaptive multimodal fusion under labeled degradation with full experiment replay — contribution quality depends on forthcoming experiments.
+ROS2 wrappers, mock SLAM, navigation, safety, and deployment assets are retained as future
+extensions. They are not presented as a tested autonomous robot and are not required for
+the perception/fusion thesis demonstration.
 
-## Experimental methodology
-
-See `docs/RESEARCH_PROTOCOL.md` and `paper/`.
-
-## Future work
-
-- Learned reliability estimator  
-- Pi detector benchmark matrix (ONNX/TFLite)  
-- External accelerators (Coral/Hailo/Jetson) via inference interface  
-- Nav2 integration  
-- Motion-capture ground truth  
-
-## Acceptance checklist
+## Acceptance status
 
 | Item | Status |
-|------|--------|
-| PC mock stack runs | Automated tests + `run_mock_stack.py` |
-| Unit/integration tests | Automated |
-| Dashboard UI | Implemented (served by FastAPI) |
-| Experiment record/replay/eval | Implemented |
-| Release packaging scripts | Implemented |
-| Pi physical sensors / SLAM / nav field test | **Pending hardware** |
-| Research metrics | **NOT YET MEASURED** |
+|---|---|
+| Laptop unit/integration suite | Automated and passing at this revision |
+| Network-camera protocol | Locally tested with a synthetic MJPEG server |
+| Earlier LD19 hardware bring-up | Recorded |
+| Final Pi Zero 2W + IMX219 stream | Owner physical test required |
+| Final-rig calibration | **NOT YET MEASURED** |
+| Quantitative thesis experiments | **NOT YET MEASURED** |
