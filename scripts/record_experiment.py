@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from amp_core import __version__
 from amp_core.common.types import FusionMode
 from amp_core.logging_io.experiment import (
     ExperimentLogger,
@@ -39,9 +40,16 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--mode", default="adaptive_fusion")
     ap.add_argument("--scenario", default="normal")
+    ap.add_argument(
+        "--source",
+        choices=("mock", "auto"),
+        default="mock",
+        help="mock is repeatable; auto may use a local camera but never the real LD19 path",
+    )
     args = ap.parse_args()
 
-    cfg = {"fusion_mode": args.mode, "scenario": args.scenario}
+    use_mock = args.source == "mock"
+    cfg = {"fusion_mode": args.mode, "scenario": args.scenario, "source": args.source}
     exp_id = new_experiment_id()
     meta = ExperimentMetadata(
         experiment_id=exp_id,
@@ -49,20 +57,29 @@ def main() -> int:
         end_time=None,
         configuration=cfg,
         git_commit=git_commit(),
-        hardware={"source": "mock_or_runtime"},
-        software_version="0.1.0",
-        ros2_version="jazzy",
-        model_version="stub",
+        hardware={"source": args.source},
+        software_version=__version__,
+        ros2_version="not_used",
+        model_version="stub" if use_mock else "auto",
         config_hash=config_hash(cfg),
     )
     logger = ExperimentLogger(ROOT / "experiments", meta)
-    pipe = AmpPipeline(PipelineConfig(fusion_mode=FusionMode(args.mode)))
+    pipe = AmpPipeline(
+        PipelineConfig(
+            fusion_mode=FusionMode(args.mode),
+            force_mock_camera=use_mock,
+            force_mock_lidar=use_mock,
+            detector_backend="stub" if use_mock else "auto",
+        )
+    )
     t_end = time.monotonic() + args.seconds
     n = 0
     while time.monotonic() < t_end:
         snap = pipe.step()
         logger.log_sample("telemetry", snap.to_dict())
-        logger.log_metric("pose_x", snap.pose["x"], method=args.mode, scenario=args.scenario)
+        logger.log_metric(
+            "pose_x", snap.pose["x"], method=args.mode, scenario=args.scenario
+        )
         logger.log_metric(
             "lidar_confidence",
             float(snap.confidence["lidar"]),

@@ -1,6 +1,9 @@
-"""End-to-end perception / fusion / navigation pipeline.
+"""Controlled simulation and repeatable-ablation pipeline.
 
-PC mode: uses laptop webcam when available; does NOT invent LiDAR if absent.
+This module is not the final live LD19/IMX219 runtime. ``demo.perception`` owns
+that real-hardware path. Here, mock sensors are used only when explicitly
+requested so simulated LiDAR can never be labelled as a live serial device.
+Both paths share the same robust object-distance fusion algorithm.
 """
 
 from __future__ import annotations
@@ -11,10 +14,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from amp_core.calibration.distance_fusion import fuse_detections_distances
 from amp_core.calibration.transforms import (
     CameraIntrinsics,
     ExtrinsicTransform,
-    associate_detection_with_lidar,
     bearing_from_bbox_center,
     lidar_polar_to_camera,
 )
@@ -31,7 +34,10 @@ from amp_core.lidar.processing import (
 )
 from amp_core.mocks.sensors import MockRobot
 from amp_core.navigation.planner import NavigationConfig, SimpleNavigator
-from amp_core.reliability.estimator import ReliabilityConfig, create_reliability_estimator
+from amp_core.reliability.estimator import (
+    ReliabilityConfig,
+    create_reliability_estimator,
+)
 from amp_core.safety.supervisor import SafetyConfig, SafetySupervisor
 from amp_core.slam.backends import SlamConfig, create_slam
 from amp_core.tracking.mot import MultiObjectTracker, TrackerConfig
@@ -95,12 +101,12 @@ class PipelineSnapshot:
 
 
 class AmpPipeline:
-    """Orchestrates real webcam / optional LiDAR / mock-only when forced."""
+    """Orchestrate explicitly labelled mock sensors for controlled experiments."""
 
     def __init__(self, cfg: PipelineConfig | None = None) -> None:
         self.cfg = cfg or PipelineConfig()
         self.inventory = discover_hardware()
-        self.robot = MockRobot()  # used only when mock camera/lidar forced or missing
+        self.robot = MockRobot()
 
         cam_idx = self.cfg.camera_index
         if cam_idx is None:
@@ -117,14 +123,17 @@ class AmpPipeline:
                 )
             )
             self.camera_live = bool(self.webcam.available)
+        self.active_camera_index = cam_idx if self.camera_live else None
+        self.camera_mock = bool(self.cfg.force_mock_camera)
 
-        self.lidar_live = bool(self.inventory.has_lidar) and not self.cfg.force_mock_lidar
-        # Until LD19 serial driver is bound on this PC, treat missing serial as no LiDAR
-        if not self.inventory.has_lidar:
-            self.lidar_live = False
+        # Real LD19 I/O intentionally lives in demo/ld19_live.py. This harness
+        # must not turn "some serial port exists" into mock points labelled LIVE.
+        self.lidar_live = False
+        self.lidar_mock = bool(self.cfg.force_mock_lidar)
+        self.lidar_available = self.lidar_live or self.lidar_mock
 
         det_backend = self.cfg.detector_backend
-        if det_backend == "auto" and not self.camera_live:
+        if det_backend == "auto" and not (self.camera_live or self.camera_mock):
             det_backend = "stub"
         self.detector = create_detector(
             DetectorConfig(
@@ -147,18 +156,22 @@ class AmpPipeline:
         self.reliability = create_reliability_estimator(ReliabilityConfig())
         # Prefer camera-only fusion weights when no LiDAR
         fusion_mode = self.cfg.fusion_mode
-        if not self.lidar_live and fusion_mode == FusionMode.ADAPTIVE_FUSION:
+        if not self.lidar_available and fusion_mode == FusionMode.ADAPTIVE_FUSION:
             fusion_mode = FusionMode.CAMERA_ONLY
         fusion_cfg = FusionConfig(mode=fusion_mode)
         self.ekf = AdaptiveEKF(fusion_cfg)
         self.dyn = DynamicObstacleFilter(
-            DynamicFilterConfig(enabled=self.cfg.dynamic_filtering and self.lidar_live)
+            DynamicFilterConfig(
+                enabled=self.cfg.dynamic_filtering and self.lidar_available
+            )
         )
-        self.slam = create_slam(SlamConfig(dynamic_filtering=self.cfg.dynamic_filtering))
+        self.slam = create_slam(
+            SlamConfig(dynamic_filtering=self.cfg.dynamic_filtering)
+        )
         self.nav = SimpleNavigator(NavigationConfig())
         # Soften safety when LiDAR absent so webcam-only PC mode is usable
         safety_cfg = SafetyConfig()
-        if not self.lidar_live:
+        if not self.lidar_available:
             safety_cfg.lidar_timeout_s = 1e9
             safety_cfg.emergency_stop_distance = 0.05
             safety_cfg.min_obstacle_distance = 0.05
@@ -171,7 +184,9 @@ class AmpPipeline:
             width=self.cfg.camera_width,
             height=self.cfg.camera_height,
         )
-        self.extrinsics = ExtrinsicTransform.from_xyz_rpy(0.05, 0.0, 0.10, 0.0, 0.0, 0.0)
+        self.extrinsics = ExtrinsicTransform.lidar_to_camera_optical(
+            0.05, 0.0, 0.10, 0.0, 0.0, 0.0
+        )
         self._t_last = time.monotonic()
         self.events: list[str] = []
         self.last_jpeg_b64: str | None = None
@@ -180,10 +195,14 @@ class AmpPipeline:
         self._det_t0 = time.monotonic()
 
         self.events.append(
-            f"hw: camera={'LIVE idx='+str(cam_idx) if self.camera_live else 'MOCK/NONE'} "
-            f"lidar={'LIVE' if self.lidar_live else 'NOT_CONNECTED'} "
+            f"sources: camera={('local_live idx=' + str(cam_idx)) if self.camera_live else ('mock' if self.camera_mock else 'none')} "
+            f"lidar={'mock' if self.lidar_mock else 'none'} "
             f"detector={self.detector.name()}"
         )
+        if self.inventory.has_lidar and not self.lidar_mock:
+            self.events.append(
+                "serial port detected but real LD19 is not bound in this harness; use app.py"
+            )
         for r in self.inventory.recommendations:
             self.events.append(f"recommend: {r}")
 
@@ -197,7 +216,9 @@ class AmpPipeline:
         if self.webcam is not None:
             self.webcam.release()
 
-    def _vision_sectors_from_objects(self, objects: list[dict], default: float = 12.0) -> dict:
+    def _vision_sectors_from_objects(
+        self, objects: list[dict], default: float = 12.0
+    ) -> dict:
         """Approximate sector mins from monocular object distances (camera-only)."""
         buckets = {
             "front": default,
@@ -251,22 +272,22 @@ class AmpPipeline:
             if self.webcam.last_jpeg:
                 jpeg_b64 = base64.b64encode(self.webcam.last_jpeg).decode("ascii")
                 self.last_jpeg_b64 = jpeg_b64
-        else:
+        elif self.camera_mock:
             frame = self.robot.camera.capture(self.robot.world)
             cam_fps = self.robot.camera.fps
 
-        # ---- LiDAR (real only if connected; else empty — no fake points) ----
+        # ---- LiDAR (explicit simulation only; real LD19 uses demo/perception.py) ----
         projected: list[tuple[float, float, float]] = []
         lidar_pts: list[dict] = []
         lidar_fps = 0.0
         scan = None
-        if self.lidar_live:
-            # Serial LD19 path reserved; until wired, fall back only if forced mock
+        if self.lidar_mock:
             scan_raw = self.robot.lidar.sense(self.robot.world)
             self.safety.note_lidar()
             scan = filter_scan(scan_raw, LidarFilterConfig())
             sectors_obj = sector_distances(scan)
             sectors = sectors_obj.to_dict()
+            sectors["source"] = "mock_lidar"
             lidar_fps = self.robot.lidar.fps
             projected = lidar_polar_to_camera(
                 scan.ranges, scan.angles, self.extrinsics, self.intrinsics
@@ -277,8 +298,6 @@ class AmpPipeline:
             ]
             feats_lidar = scan_quality_features(scan)
         else:
-            # Keep safety watchdog happy without inventing ranges
-            self.safety.note_lidar()
             sectors = {
                 "front": 12.0,
                 "front_left": 12.0,
@@ -303,9 +322,11 @@ class AmpPipeline:
         dets = []
         if frame is not None:
             # Prefer BGR bytes for DNN if webcam has last_bgr
-            if self.camera_live and self.webcam is not None and self.webcam.last_bgr is not None:
-                import cv2
-
+            if (
+                self.camera_live
+                and self.webcam is not None
+                and self.webcam.last_bgr is not None
+            ):
                 bgr = self.webcam.last_bgr
                 h, w = bgr.shape[:2]
                 dets = self.detector.detect(bgr.tobytes(), w, h, 3)
@@ -321,10 +342,18 @@ class AmpPipeline:
 
         tracks = self.tracker.update(dets, dt=dt)
         fw = frame.width if frame else self.cfg.camera_width
-        for tr in tracks:
-            dist = None
-            if projected:
-                dist = associate_detection_with_lidar(tr.bbox.cx, tr.bbox.cy, projected)
+        fused_distances = []
+        if scan is not None and tracks:
+            fused_distances = fuse_detections_distances(
+                [(tr.bbox, tr.class_name, tr.confidence) for tr in tracks],
+                scan.ranges,
+                scan.angles,
+                self.extrinsics,
+                self.intrinsics,
+            )
+        for index, tr in enumerate(tracks):
+            fused = fused_distances[index] if index < len(fused_distances) else None
+            dist = fused.distance_m if fused is not None else None
             if dist is None:
                 dist = estimate_distance_m(
                     tr.bbox,
@@ -333,14 +362,18 @@ class AmpPipeline:
                     frame_height=frame.height if frame else None,
                 )
             tr.distance_m = dist
-            tr.bearing_deg = math.degrees(
-                bearing_from_bbox_center(
-                    tr.bbox.cx, fw, self.intrinsics.fx, self.intrinsics.cx
+            tr.bearing_deg = (
+                fused.bearing_deg
+                if fused is not None
+                else math.degrees(
+                    bearing_from_bbox_center(
+                        tr.bbox.cx, fw, self.intrinsics.fx, self.intrinsics.cx
+                    )
                 )
             )
 
         objects = [t.to_dict() for t in tracks]
-        if not self.lidar_live:
+        if not self.lidar_available:
             vis = self._vision_sectors_from_objects(objects)
             sectors.update(vis)
             sectors["source"] = "camera_geometry"
@@ -378,7 +411,7 @@ class AmpPipeline:
             ),
             conf,
         )
-        if self.camera_live:
+        if frame is not None:
             self.ekf.update(
                 Measurement2D(
                     self.robot.world.pose.x,
@@ -388,7 +421,7 @@ class AmpPipeline:
                 ),
                 conf,
             )
-        if self.lidar_live and scan is not None:
+        if self.lidar_available and scan is not None:
             self.ekf.update(
                 Measurement2D(
                     self.robot.world.pose.x,
@@ -400,7 +433,7 @@ class AmpPipeline:
             )
         fusion_state = self.ekf.state()
 
-        if self.lidar_live and scan is not None:
+        if self.lidar_available and scan is not None:
             dyn_res = self.dyn.filter(scan, tracks)
             slam_scan = dyn_res.static_scan if self.cfg.dynamic_filtering else scan
             slam_pose = self.slam.update(slam_scan, fusion_state.pose)
@@ -426,7 +459,7 @@ class AmpPipeline:
         else:
             nav_cmd = self.robot.cmd
         safety = self.safety.filter_command(
-            nav_cmd, sector_obj, lidar_healthy=True if not self.lidar_live else True
+            nav_cmd, sector_obj, lidar_healthy=self.lidar_available
         )
         self.robot.cmd = safety.limited
 
@@ -458,16 +491,23 @@ class AmpPipeline:
             camera_meta={
                 "width": frame.width if frame else self.cfg.camera_width,
                 "height": frame.height if frame else self.cfg.camera_height,
-                "encoding": "jpeg" if jpeg_b64 else (frame.encoding if frame else "none"),
+                "encoding": "jpeg"
+                if jpeg_b64
+                else (frame.encoding if frame else "none"),
                 "fps": cam_fps,
-                "source": "webcam" if self.camera_live else "mock",
+                "source": "local_usb"
+                if self.camera_live
+                else ("mock" if self.camera_mock else "none"),
             },
             hardware={
                 "camera_live": self.camera_live,
                 "lidar_live": self.lidar_live,
-                "camera_index": self.cfg.camera_index
-                if self.cfg.camera_index is not None
-                else self.inventory.primary_camera_index,
+                "camera_source": "local_usb"
+                if self.camera_live
+                else ("mock" if self.camera_mock else "none"),
+                "lidar_source": "mock" if self.lidar_mock else "none",
+                "lidar_mock": self.lidar_mock,
+                "camera_index": self.active_camera_index,
                 "detector": self.detector.name(),
                 "inventory": self.inventory.to_dict(),
             },

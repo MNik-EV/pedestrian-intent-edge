@@ -14,21 +14,27 @@ if str(ROOT) not in sys.path:
 
 from amp_core.calibration.transforms import (  # noqa: E402
     CameraIntrinsics,
-    ExtrinsicTransform,
     associate_detection_with_lidar,
     wrap_angle,
 )
 from amp_core.common.types import (  # noqa: E402
-    BoundingBox,
-    Detection,
     FusionMode,
     LidarScan,
     Timestamp,
 )
-from amp_core.detection.backends import DetectorConfig, create_detector, benchmark_detector  # noqa: E402
+from amp_core.detection.backends import (
+    DetectorConfig,
+    create_detector,
+    benchmark_detector,
+)  # noqa: E402
 from amp_core.degradation.inject import DegradationConfig, DegradationEngine  # noqa: E402
 from amp_core.dynamic_filter.filter import DynamicObstacleFilter  # noqa: E402
-from amp_core.fusion.ekf import AdaptiveEKF, FusionConfig, Measurement2D, bounded_r_scale  # noqa: E402
+from amp_core.fusion.ekf import (
+    AdaptiveEKF,
+    FusionConfig,
+    Measurement2D,
+    bounded_r_scale,
+)  # noqa: E402
 from amp_core.lidar.processing import (  # noqa: E402
     filter_scan,
     LidarFilterConfig,
@@ -113,21 +119,27 @@ def test_safety_estop_independent() -> None:
     s = SafetySupervisor(SafetyConfig(emergency_stop_distance=0.25))
     s.heartbeat()
     s.note_lidar()
-    sectors = SectorDistances(
-        0.1, 2, 2, 2, 2, 2, 2, 2, Timestamp.now()
-    )
+    sectors = SectorDistances(0.1, 2, 2, 2, 2, 2, 2, 2, Timestamp.now())
     status = s.filter_command(Twist2D(0.3, 0.0), sectors)
     assert status.action.value == "ESTOP"
     assert status.limited.linear == 0.0
 
 
 def test_projection_and_association() -> None:
-    K = CameraIntrinsics(500, 500, 320, 240, 640, 480)
-    T = ExtrinsicTransform.from_xyz_rpy(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     # Point ahead at 2m in lidar -> camera with identity
     proj = [(320.0, 240.0, 2.0), (325.0, 242.0, 2.1)]
     d = associate_detection_with_lidar(320, 240, proj, pixel_radius=20)
     assert d is not None and 1.9 < d < 2.2
+
+
+def test_intrinsics_scale_with_stream_resolution() -> None:
+    K = CameraIntrinsics(500, 510, 320, 240, 640, 480, (0.1, -0.2, 0, 0, 0))
+    scaled = K.scaled_to(1280, 720)
+    assert scaled.fx == pytest.approx(1000)
+    assert scaled.fy == pytest.approx(765)
+    assert scaled.cx == pytest.approx(640)
+    assert scaled.cy == pytest.approx(360)
+    assert scaled.dist_coeffs == K.dist_coeffs
 
 
 def test_degradation_labeled() -> None:
@@ -147,10 +159,18 @@ def test_pipeline_step_mock() -> None:
             detector_backend="stub",
         )
     )
+    pipe.step()  # tracker warm-up
     snap = pipe.step()
     d = snap.to_dict()
     assert "pose" in d and "sectors" in d and "confidence" in d
     assert "hardware" in d
+    assert d["hardware"]["lidar_live"] is False
+    assert d["hardware"]["lidar_source"] == "mock"
+    assert d["hardware"]["camera_source"] == "mock"
+    assert d["hardware"]["camera_index"] is None
+    assert d["sectors"]["source"] == "mock_lidar"
+    assert d["objects"] and d["objects"][0]["distance_m"] is not None
+    assert d["fusion"]["mode"] == FusionMode.ADAPTIVE_FUSION.value
     pipe.close()
 
 

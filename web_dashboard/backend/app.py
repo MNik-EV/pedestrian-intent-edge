@@ -8,7 +8,14 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -144,6 +151,10 @@ def api_status() -> dict[str, Any]:
         "has_telemetry": bool(_latest),
         "camera_live": pipe.camera_live,
         "lidar_live": pipe.lidar_live,
+        "camera_source": "local_usb"
+        if pipe.camera_live
+        else ("mock" if pipe.camera_mock else "none"),
+        "lidar_source": "mock" if pipe.lidar_mock else "none",
         "detector": pipe.detector.name(),
     }
 
@@ -154,6 +165,10 @@ def api_hardware() -> dict[str, Any]:
     return {
         "camera_live": pipe.camera_live,
         "lidar_live": pipe.lidar_live,
+        "camera_source": "local_usb"
+        if pipe.camera_live
+        else ("mock" if pipe.camera_mock else "none"),
+        "lidar_source": "mock" if pipe.lidar_mock else "none",
         "detector": pipe.detector.name(),
         "inventory": pipe.inventory.to_dict(),
         "recommendations": pipe.inventory.recommendations,
@@ -200,7 +215,9 @@ def api_experiments() -> dict[str, Any]:
     root = os.path.abspath(root)
     ids = []
     if os.path.isdir(root):
-        ids = sorted([d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))])
+        ids = sorted(
+            [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
+        )
     return {"experiments": ids}
 
 
@@ -230,7 +247,9 @@ def api_clear_estop(_: None = Depends(require_control)) -> dict[str, str]:
 
 
 @app.post("/api/teleop")
-def api_teleop(req: CmdVelRequest, _: None = Depends(require_control)) -> dict[str, Any]:
+def api_teleop(
+    req: CmdVelRequest, _: None = Depends(require_control)
+) -> dict[str, Any]:
     """Web joystick. Safety supervisor ALWAYS filters commands locally."""
     _rate_limit("teleop", 0.03)
     pipe = get_pipeline()
@@ -239,7 +258,9 @@ def api_teleop(req: CmdVelRequest, _: None = Depends(require_control)) -> dict[s
 
 
 @app.post("/api/experiment/start")
-def api_exp_start(req: ExperimentRequest, _: None = Depends(require_control)) -> dict[str, str]:
+def api_exp_start(
+    req: ExperimentRequest, _: None = Depends(require_control)
+) -> dict[str, str]:
     get_pipeline().events.append(f"experiment_start:{req.name}:{req.scenario}")
     return {"status": "started", "name": req.name, "scenario": req.scenario}
 
@@ -403,7 +424,7 @@ function draw(){
   const W=lidar.width/devicePixelRatio, H=lidar.height/devicePixelRatio, cx=W/2, cy=H/2, scale=Math.min(W,H)/(2*6);
   ctx.fillStyle='#0a1014'; ctx.fillRect(0,0,W,H);
   const hw=latest.hardware||{};
-  if(!hw.lidar_live){
+  if(hw.lidar_source==='none'){
     ctx.fillStyle='#e6b84d'; ctx.font='14px IBM Plex Mono';
     ctx.fillText('LiDAR NOT CONNECTED', 16, 28);
     ctx.fillStyle='#8aa0b2'; ctx.font='12px IBM Plex Mono';
@@ -452,7 +473,7 @@ function renderTables(d){
     body.appendChild(tr);
   });
   const s=d.sectors||{};
-  const src=s.source|| (d.hardware&&d.hardware.lidar_live?'lidar':'camera');
+  const src=s.source||((d.hardware||{}).lidar_source||'camera');
   document.getElementById('sectors').textContent =
 `source: ${src}
 FRONT       ${(s.front??0).toFixed(2)} m
@@ -476,8 +497,8 @@ camFPS=${(sys.camera_fps||0).toFixed(1)} detFPS=${(sys.detection_fps||0).toFixed
   const ok = (saf.action||'ALLOW')!=='ESTOP';
   pills.innerHTML=`
     <div class="pill ${ok?'ok':'err'}">ROBOT ${saf.action||'…'}</div>
-    <div class="pill ${hw.camera_live?'ok':'warn'}">CAM ${hw.camera_live?'LIVE':'OFF'}</div>
-    <div class="pill ${hw.lidar_live?'ok':'warn'}">LIDAR ${hw.lidar_live?'LIVE':'OFF'}</div>
+    <div class="pill ${hw.camera_source!=='none'?'ok':'warn'}">CAM ${(hw.camera_source||'none').toUpperCase()}</div>
+    <div class="pill ${hw.lidar_source!=='none'?'ok':'warn'}">LIDAR ${(hw.lidar_source||'none').toUpperCase()}</div>
     <div class="pill">DET ${(sys.detection_fps||0).toFixed(1)} FPS</div>
     <div class="pill ok">WS LIVE</div>`;
 }

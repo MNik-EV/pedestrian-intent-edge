@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run PC stack with laptop webcam + YOLOv8 detection."""
+"""Run the controlled mock stack for software rehearsal and ablation."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ os.environ.setdefault("AMP_AUTH_DISABLED", "0")
 os.environ.setdefault("AMP_CONTROL_TOKEN", "dev-token-change-me")
 os.environ.setdefault("AMP_FUSION_MODE", "adaptive_fusion")
 os.environ.setdefault("AMP_DETECTOR", "auto")
-os.environ.setdefault("AMP_FORCE_MOCK", "0")
+os.environ.setdefault("AMP_FORCE_MOCK", "1")
 
 
 def main() -> None:
@@ -25,12 +25,13 @@ def main() -> None:
     print("=== Hardware discovery ===")
     for line in inv.recommendations:
         print(" -", line)
+    print("Sensor source: MOCK (physical inventory below is informational only)")
     print(
-        f"Camera: {'LIVE idx=' + str(inv.primary_camera_index) if inv.has_camera else 'NOT FOUND'}"
+        f"Detected local camera: {inv.primary_camera_index if inv.has_camera else 'none'}"
     )
-    print("LiDAR:", "FOUND" if inv.has_lidar else "NOT CONNECTED")
+    print("Detected serial candidate:", "yes" if inv.has_lidar else "no")
     print()
-    print("Detector: YOLOv8n (first run downloads ~6MB weights)")
+    print("Detector: stub (deterministic mock input)")
     print("AMP stack: http://127.0.0.1:8000")
     print("Token:", os.environ["AMP_CONTROL_TOKEN"])
     uvicorn.run(
