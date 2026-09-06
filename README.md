@@ -2,7 +2,7 @@
 
 Bachelor's thesis implementation for semantic object detection and metric ranging with a
 low-cost camera–LiDAR pair. An IMX219-120 CSI camera is captured by a Raspberry Pi Zero
-2W and streamed to a laptop; an LD19 2D LiDAR connects directly to the laptop over
+2W and streamed to a laptop over direct USB Ethernet (Wi-Fi is a fallback); an LD19 2D LiDAR connects directly to the laptop over
 USB–serial. The laptop runs detection, geometric fusion, tracking, logging, and the live
 FastAPI dashboard.
 
@@ -26,7 +26,7 @@ run with measured ground truth. Legacy PS3 Eye calibration and evidence are reta
 ## Architecture
 
 ```text
-IMX219-120 --CSI--> Pi Zero 2W --MJPEG/Wi-Fi--┐
+IMX219-120 --CSI--> Pi Zero 2W --MJPEG/USB LAN--┐
                                                ├--> laptop: YOLO + fusion + dashboard + logs
 LD19 --------USB serial------------------------┘
 ```
@@ -37,8 +37,8 @@ The Pi is deliberately a camera relay only. It does not run AI or fusion. This k
 
 ## Quick start
 
-Requirements: Python 3.11+ on the laptop, Raspberry Pi OS Lite 64-bit on the Pi, and both
-devices on the same network.
+Requirements: Python 3.11+ on the laptop and Raspberry Pi OS Lite 64-bit on the Pi. The
+primary direct USB network does not depend on a router or saved Wi-Fi credentials.
 
 ```bash
 python -m pip install -r requirements.txt

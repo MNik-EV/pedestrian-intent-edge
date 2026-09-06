@@ -68,6 +68,21 @@ http://<pi-hostname>.local:8000/
 raw stream link. Find the Pi's hostname/IP with `hostname` / `hostname -I` on
 the Pi, or `ping raspberrypi.local` from the laptop if mDNS/Avahi is working.
 
+### Router-independent direct USB connection
+
+The prepared thesis SD card exposes the Zero 2W as a USB Ethernet gadget with the fixed
+link-local address `169.254.64.2`. Connect the laptop to the micro-USB port labelled
+`USB` (not `PWR IN`) with a data-capable cable. This path needs no router, DHCP server, or
+saved Wi-Fi password:
+
+```powershell
+ssh amp-pi
+start http://169.254.64.2:8000/
+```
+
+The laptop SSH alias is stored in `~/.ssh/config`. `ssh amp-pi-wifi` remains available as
+an mDNS fallback whenever the Pi and laptop share a LAN.
+
 If the image is choppy or the Pi struggles, lower `--fps` (e.g. 10) or
 `--quality` (e.g. 50) before raising resolution — the Zero 2W's CPU is the
 bottleneck, not the network.

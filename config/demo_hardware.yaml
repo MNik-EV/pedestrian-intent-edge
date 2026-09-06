@@ -6,7 +6,8 @@ camera:
   #           before the Pi was wired up). Never use index 0 (laptop webcam).
   mode: network
   network:
-    url: "http://raspberrypi.local:8000/stream.mjpg"
+    # Stable direct USB-Ethernet address; independent of Wi-Fi/router changes.
+    url: "http://169.254.64.2:8000/stream.mjpg"
     reconnect_timeout_s: 3.0
   index: 1
 lidar:
