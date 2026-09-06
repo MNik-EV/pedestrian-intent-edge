@@ -31,6 +31,19 @@ sudo apt update
 sudo apt install -y python3-picamera2 --no-install-recommends
 ```
 
+After copying this `edge/` directory to the Pi, the same installation and checks can be
+performed automatically. The installer is safe to run again after an interrupted setup:
+
+```bash
+cd ~/amp_edge
+chmod +x setup_pi.sh
+./setup_pi.sh
+```
+
+It installs the camera packages, verifies CSI discovery, captures
+`~/imx219-camera-test.jpg`, installs the streamer in `~/amp_edge`, enables its per-user
+systemd service at boot, and verifies the local HTTP endpoint.
+
 Official references: [Raspberry Pi camera software](https://www.raspberrypi.com/documentation/computers/camera_software.html)
 and the [Picamera2 manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
 
