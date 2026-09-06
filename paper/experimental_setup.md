@@ -18,6 +18,10 @@ measurements into the final quantitative table.
 - H1: fused ranging has lower MAE than monocular size ranging overall.
 - H2: range error and missing associations increase near image/scan limits and under clutter.
 - H3: poor lighting reduces detection availability more than LiDAR range availability.
+- H4: samples where the self-supervised cross-modal check reports `consistency_flag =
+  conflict` (see `paper/methodology.md` §6.3) show larger measured |error| than samples
+  reported `consistent`, even though the flag is computed with no access to ground truth.
+  This tests whether the flag is a real usefulness signal or just noise.
 
 Reject or retain these hypotheses based on measured intervals/effect sizes, not preference.
 
@@ -67,7 +71,8 @@ Keep raw frame-level telemetry; do not select the best frame.
 
 Copy `evaluation/ranging_measurements_template.csv` into a new experiment folder. Fill one
 row per aggregated placement, including scene, class, ground truth, estimate, method,
-bearing, confidence, and LiDAR support. Run:
+bearing, confidence, LiDAR support, and — read directly off the live overlay/telemetry for
+that placement — `z_score` and `consistency_flag` (needed for H4). Run:
 
 ```bash
 python evaluation/evaluate_ranging.py \
@@ -75,8 +80,14 @@ python evaluation/evaluate_ranging.py \
   --out-dir experiments/FINAL_<date>
 ```
 
-The evaluator produces overall and predeclared group summaries with MAE, RMSE, bias,
-median absolute error, P95 absolute error, relative MAE, and a bootstrap 95% MAE interval.
+The evaluator produces overall and predeclared group summaries (including one grouped by
+`consistency_flag`, for H4) with MAE, RMSE, bias, median absolute error, P95 absolute
+error, relative MAE, and a bootstrap 95% MAE interval.
+
+Independently of the manual ground-truth CSV, `evaluation/evaluate_live_run.py` also
+reports the cross-modal conflict rate and z-score distribution directly from `SHOW_*`
+telemetry (§"Runtime and stability" below) — this needs no ground truth at all and can be
+reported even before the manual ranging matrix is complete.
 
 ## Baselines
 
@@ -84,17 +95,19 @@ For the same saved placement/window compare:
 
 1. monocular class-size estimate;
 2. naive projected-point median if retained as an ablation;
-3. implemented bearing-gated clustered LiDAR range;
-4. full selection/blending logic, with method labels preserved.
+3. implemented bearing-gated clustered LiDAR range (no monocular cross-check);
+4. full logic: bearing-gated cluster + precision-weighted (inverse-variance) fusion with
+   the monocular prior, with method labels and `consistency_flag` preserved.
 
 Do not compare methods on different physical placements unless randomized and balanced.
 
 ## Runtime and stability
 
 Run at least three 10-minute sessions. Record camera FPS, LiDAR scan rate, detection
-latency, CPU/RAM, reconnect count, dropped/empty detections, and fused-range coverage.
-Report median and P95 latency plus successful-session duration. Network interruptions must
-remain in the record and be discussed.
+latency, CPU/RAM, reconnect count, dropped/empty detections, fused-range coverage, and the
+cross-modal conflict rate/z-score distribution. Report median and P95 latency plus
+successful-session duration. Network interruptions must remain in the record and be
+discussed.
 
 For each final `SHOW_*` folder run:
 

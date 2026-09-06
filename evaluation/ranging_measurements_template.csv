@@ -1,1 +1,1 @@
-sample_id,scene,object_class,ground_truth_m,estimated_m,fusion_method,bearing_deg,fusion_confidence,lidar_points
+sample_id,scene,object_class,ground_truth_m,estimated_m,fusion_method,bearing_deg,fusion_confidence,lidar_points,z_score,consistency_flag

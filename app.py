@@ -54,6 +54,7 @@ header{display:flex;justify-content:space-between;align-items:center;padding:14p
 .brand{font-size:1.25rem;font-weight:700;letter-spacing:.02em}.brand span{color:var(--accent)}
 .pills{display:flex;gap:8px;flex-wrap:wrap}.pill{background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:8px;font-size:14px;font-weight:600}
 .pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}
+.oktxt{color:var(--ok)}.warntxt{color:var(--warn)}
 main{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;padding:14px;max-width:1400px;margin:0 auto}
 @media(max-width:980px){main{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-height:340px;display:flex;flex-direction:column}
@@ -85,7 +86,7 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06
 <div class="bottom">
   <section class="card" style="min-height:220px"><h2>Objects</h2>
     <div style="overflow:auto;max-height:280px;padding:0 8px">
-      <table><thead><tr><th>Class</th><th>Conf</th><th>Distance</th><th>Bearing</th><th>LiDAR pts</th></tr></thead>
+      <table><thead><tr><th>Class</th><th>Conf</th><th>Distance</th><th>Bearing</th><th>LiDAR pts</th><th>Cross-check</th></tr></thead>
       <tbody id="tbody"></tbody></table>
     </div>
   </section>
@@ -128,7 +129,8 @@ function render(d){
   tbody.innerHTML='';
   (d.objects||[]).forEach(o=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${o.class}</td><td>${o.confidence.toFixed(2)}</td><td>${o.distance_m!=null?o.distance_m.toFixed(2)+' m':'—'}</td><td>${o.bearing_deg.toFixed(1)}°</td><td>${o.lidar_points}</td>`;
+    const cc = o.consistency==='consistent'?'oktxt':(o.consistency==='conflict'?'warntxt':'');
+    tr.innerHTML=`<td>${o.class}</td><td>${o.confidence.toFixed(2)}</td><td>${o.distance_m!=null?o.distance_m.toFixed(2)+' m':'—'}</td><td>${o.bearing_deg.toFixed(1)}°</td><td>${o.lidar_points}</td><td class="${cc}">${o.consistency}${o.z_score!=null?' (z='+o.z_score.toFixed(1)+')':''}</td>`;
     tbody.appendChild(tr);
   });
   pills.innerHTML=`
@@ -137,9 +139,12 @@ function render(d){
     <div class="pill">CPU ${d.cpu_percent.toFixed(0)}%</div>
     <div class="pill">DET ${d.detect_ms.toFixed(0)} ms</div>
     <div class="pill">UP ${d.uptime_s.toFixed(0)}s</div>`;
+  const xm = d.cross_modal||{};
   notes.innerHTML = (d.calib_notes||[]).map(x=>'• '+x).join('<br/>') +
     `<br/>experiment: <b>${d.experiment_id||''}</b>` +
-    `<br/>detector: ${d.detector||''}`;
+    `<br/>detector: ${d.detector||''}` +
+    `<br/>cross-modal mean|z|: <b>${(xm.mean_abs_zscore||0).toFixed(2)}</b>` +
+    ` (n=${xm.n_samples||0}, conflicts=${xm.n_conflicts||0})`;
   drawRadar(d);
 }
 function connectWs(){
@@ -181,6 +186,7 @@ async def _loop() -> None:
             "uptime_s": time.monotonic() - START_MONO,
             "projected_count": snap.projected_count,
             "calib_notes": snap.calib_notes,
+            "cross_modal": {k: round(v, 3) for k, v in snap.cross_modal.items()},
             "experiment_id": LOGGER.exp_id,
             "detector": PERCEPTION.detector.name(),
         }

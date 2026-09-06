@@ -96,7 +96,7 @@ minimum (noise-sensitive) or median (can lie behind the front surface):
 Detections are processed in descending detector confidence, and assigned LiDAR points are
 reserved. This prevents two overlapping boxes from claiming the same depth cluster.
 
-## 6. Monocular cue and fusion confidence
+## 6. Monocular cue and uncertainty-aware fusion
 
 For a fully visible person, a weak nominal-height prior is
 
@@ -104,16 +104,78 @@ For a fully visible person, a weak nominal-height prior is
 z_{mono}=f_y H_{nominal}/h_{px},\qquad H_{nominal}=1.70\text{ m}.
 \]
 
-It selects among ambiguous clusters; it is not a metric label. For other classes the code
-uses a deliberately weak nominal-width cue. Base fusion confidence is
-\(\min(1,n/12)\). Agreement within 0.45 m increases confidence by 0.25. For a person with
-disagreement greater than 1.2 m, the output is marked as a LiDAR/monocular blend
-\(0.65r_{LiDAR}+0.35z_{mono}\), and confidence is reduced. Each output records the method,
-support count, confidence, and optional prior for later analysis.
+It selects among ambiguous clusters; it is not a metric label on its own. For other classes
+the code uses a deliberately weak nominal-width cue. Base fusion confidence before any
+cross-check is \(\min(1,n/12)\), where \(n\) is the LiDAR cluster's support count.
 
-If no valid LiDAR cluster exists, the live display labels the absence and may report a
-class-size monocular estimate as a fallback. Results must separate LiDAR-associated and
-monocular-fallback samples.
+### 6.1 Turning each cue into a variance
+
+Rather than combining the LiDAR range and the monocular depth with a fixed, arbitrarily
+chosen ratio, each is first given an explicit variance so they can be combined by how
+certain they actually are in that frame:
+
+\[
+\sigma^2_{LiDAR}=\max\!\big(\sigma^2_{floor},\ \operatorname{Var}(\{r_j : j\in k^*\})\big),
+\qquad \sigma_{floor}=0.03\text{ m},
+\]
+
+i.e. the sample variance of the selected cluster's ranges, floored at the LD19's
+order-of-magnitude single-shot noise so a lucky 2-point cluster is never treated as
+noise-free. For the monocular depth, the prior's fractional uncertainty is propagated
+through \(z_{mono}=f_yH/h_{px}\) to first order:
+
+\[
+\sigma^2_{mono}=\Big(z_{mono}\cdot\frac{\sigma_H}{H}\Big)^2,\qquad
+\frac{\sigma_H}{H}=\begin{cases}0.07/1.70 & \text{person (stated anthropometric assumption)}\\[2pt]
+0.25 & \text{other classes (deliberately wide, no comparable prior)}\end{cases}.
+\]
+
+These are engineering assumptions, stated here explicitly, not measured per-unit values.
+
+### 6.2 Precision-weighted combination
+
+When both cues are available, they are combined by inverse-variance (precision) weighting
+— the minimum-variance linear unbiased estimator of two independent measurements of the
+same quantity:
+
+\[
+\hat z=\frac{z_{LiDAR}/\sigma^2_{LiDAR}+z_{mono}/\sigma^2_{mono}}
+{1/\sigma^2_{LiDAR}+1/\sigma^2_{mono}},\qquad
+\sigma^2_{\hat z}=\Big(\frac{1}{\sigma^2_{LiDAR}}+\frac{1}{\sigma^2_{mono}}\Big)^{-1}.
+\]
+
+This replaces an earlier fixed \(0.65/0.35\) blend with a ratio that adapts per detection:
+a tight, well-supported LiDAR cluster dominates; a sparse or noisy one yields more to the
+monocular prior. \(\sigma^2_{\hat z}\) is reported alongside the distance for later analysis.
+
+### 6.3 Cross-modal disagreement as a self-supervised signal
+
+The two cues are independent estimates of the same physical quantity, so their
+disagreement relative to their own stated uncertainty is informative even without ground
+truth:
+
+\[
+Z=\frac{|z_{LiDAR}-z_{mono}|}{\sqrt{\sigma^2_{LiDAR}+\sigma^2_{mono}}}.
+\]
+
+\(Z\le 2\) is labelled `consistent` (confidence raised by 0.25, capped at 1); \(Z>2\) is
+labelled `conflict` (confidence scaled by 0.6). The estimate is still fused in both cases —
+precision weighting already discounts whichever source has higher variance — but a
+conflict is reported, not hidden inside an averaged number. The system does not attempt to
+decide *which* sensor is wrong; §8 uses the same signal, aggregated over recent detections,
+to symmetrically discount both single-sensor confidences when disagreement is persistent.
+This is testable without any additional instrumentation: §7's evaluation protocol records
+`z_score`/`consistency_flag` per sample precisely so that measured error can be compared
+between `consistent` and `conflict` groups (H4 in `experimental_setup.md`) — if the flag is
+meaningful, `conflict` samples should show larger measured error, even though the flag
+itself never sees the ground truth.
+
+Each output records the method label, support count, base and cross-checked confidence,
+fused variance, z-score, consistency flag, and optional monocular prior for later analysis.
+
+If no valid LiDAR cluster exists, the live display labels the absence (`consistency_flag =
+single_source`) and may report a class-size monocular estimate as a fallback. Results must
+separate LiDAR-associated, cross-checked, and monocular-fallback samples.
 
 ## 7. Temporal processing
 
@@ -138,6 +200,22 @@ It supports LiDAR-only, camera-only, fixed, adaptive, and adaptive-plus-dynamic-
 ablations under labeled synthetic degradation. This pose-fusion harness is not evidence
 that ROS2/SLAM/navigation ran on the physical Pi Zero 2W.
 
+A third, independent input augments \(c\): the rolling mean \(|Z|\) from §6.3
+(`CrossModalMonitor`, exponential moving average across recent detections). Once at least
+5 cross-checked detections have been observed, both \(c_{lidar}\) and \(c_{camera}\) are
+scaled by a shared, symmetric penalty
+
+\[
+p=\operatorname{clip}\big(1-0.15\max(0,\overline{|Z|}-1),\ 0.5,\ 1\big),
+\]
+
+i.e. no discount while disagreement stays within about one combined sigma, a floor of 0.5
+so persistent conflict cannot zero out either sensor's trust, and — deliberately — the same
+penalty applied to both sensors, since the monitor cannot attribute fault to either one from
+disagreement alone. This is a second, independent reliability cue: single-modality quality
+features (brightness, point density, ...) can look nominal while the two sensors still
+disagree about the world, and vice versa.
+
 ## 9. Computational complexity
 
 For (N) scan points and (M) detections, point preparation is (O(N)). Per-detection
@@ -152,3 +230,7 @@ roughly 360-point planar scan and few objects, detector inference dominates runt
 - Wide-angle edge quality depends on chessboard coverage and lens model.
 - Reflective/transparent surfaces can produce absent or biased LiDAR returns.
 - Pretrained detector domain shift is not solved by geometric fusion.
+- §6's variance models (LiDAR noise floor, anthropometric height std-dev, generic-class
+  fractional std) are stated engineering assumptions, not values calibrated per-unit or
+  per-population; the \(Z>2\) conflict threshold is likewise a fixed choice, not tuned on
+  held-out data. Report them as such rather than as measured uncertainties.

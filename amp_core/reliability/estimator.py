@@ -23,6 +23,33 @@ class ReliabilityConfig:
     lidar_density_w: float = 0.25
     lidar_jump_w: float = 0.20
     lidar_temporal_w: float = 0.20
+    # Cross-modal disagreement discount (see cross_modal_monitor.py): symmetric
+    # penalty on both lidar_c and camera_c once the rolling mean |z-score| of
+    # LiDAR-vs-monocular distance disagreement exceeds 1 sigma-of-uncertainty.
+    cross_modal_zscore_free: float = 1.0
+    cross_modal_penalty_per_sigma: float = 0.15
+    cross_modal_penalty_floor: float = 0.5
+    cross_modal_min_samples: int = 5
+
+
+def _cross_modal_penalty(
+    cross_modal_features: dict[str, float] | None, cfg: ReliabilityConfig
+) -> float:
+    """Symmetric [floor, 1.0] multiplier applied to both lidar_c and camera_c.
+
+    Cannot tell which sensor is at fault, so it discounts both equally once
+    persistent LiDAR-vs-monocular disagreement (see cross_modal_monitor.py)
+    exceeds what each source's own stated uncertainty predicts.
+    """
+    if not cross_modal_features:
+        return 1.0
+    n = cross_modal_features.get("n_samples", 0.0)
+    if n < cfg.cross_modal_min_samples:
+        return 1.0
+    z = cross_modal_features.get("mean_abs_zscore", 0.0)
+    excess = max(0.0, z - cfg.cross_modal_zscore_free)
+    penalty = 1.0 - cfg.cross_modal_penalty_per_sigma * excess
+    return max(cfg.cross_modal_penalty_floor, min(1.0, penalty))
 
 
 class ReliabilityEstimator(ABC):
@@ -33,6 +60,7 @@ class ReliabilityEstimator(ABC):
         camera_features: VisionQualityFeatures | None = None,
         imu_features: dict[str, float] | None = None,
         odom_features: dict[str, float] | None = None,
+        cross_modal_features: dict[str, float] | None = None,
     ) -> SensorConfidence:
         raise NotImplementedError
 
@@ -47,12 +75,15 @@ class FixedReliabilityEstimator(ReliabilityEstimator):
         camera_features: VisionQualityFeatures | None = None,
         imu_features: dict[str, float] | None = None,
         odom_features: dict[str, float] | None = None,
+        cross_modal_features: dict[str, float] | None = None,
     ) -> SensorConfidence:
         feats: dict[str, float] = {}
         if lidar_features:
             feats.update({f"lidar_{k}": v for k, v in lidar_features.items()})
         if camera_features:
             feats.update({f"cam_{k}": v for k, v in camera_features.to_dict().items()})
+        if cross_modal_features:
+            feats.update({f"xmodal_{k}": v for k, v in cross_modal_features.items()})
         return SensorConfidence(
             lidar=self.cfg.fixed_lidar,
             camera=self.cfg.fixed_camera,
@@ -75,6 +106,7 @@ class HeuristicReliabilityEstimator(ReliabilityEstimator):
         camera_features: VisionQualityFeatures | None = None,
         imu_features: dict[str, float] | None = None,
         odom_features: dict[str, float] | None = None,
+        cross_modal_features: dict[str, float] | None = None,
     ) -> SensorConfidence:
         feats: dict[str, float] = {}
         lidar_c = self.cfg.fixed_lidar
@@ -121,6 +153,13 @@ class HeuristicReliabilityEstimator(ReliabilityEstimator):
             disagree = odom_features.get("lidar_disagreement", 0.0)
             odom_c = consistency * (1.0 - slip) * (1.0 - min(1.0, disagree))
 
+        if cross_modal_features:
+            feats.update({f"xmodal_{k}": v for k, v in cross_modal_features.items()})
+            penalty = _cross_modal_penalty(cross_modal_features, self.cfg)
+            feats["xmodal_penalty"] = penalty
+            lidar_c *= penalty
+            camera_c *= penalty
+
         return SensorConfidence(
             lidar=lidar_c,
             camera=camera_c,
@@ -146,10 +185,11 @@ class LearnedReliabilityEstimator(ReliabilityEstimator):
         camera_features: VisionQualityFeatures | None = None,
         imu_features: dict[str, float] | None = None,
         odom_features: dict[str, float] | None = None,
+        cross_modal_features: dict[str, float] | None = None,
     ) -> SensorConfidence:
         # MODE_LEARNED reserved — no fabricated ML scores
         conf = self._fallback.estimate(
-            lidar_features, camera_features, imu_features, odom_features
+            lidar_features, camera_features, imu_features, odom_features, cross_modal_features
         )
         conf.features["learned_model_loaded"] = 1.0 if self._model is not None else 0.0
         return conf

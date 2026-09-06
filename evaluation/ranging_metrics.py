@@ -25,6 +25,8 @@ class RangingSample:
     bearing_deg: float | None = None
     fusion_confidence: float | None = None
     lidar_points: int | None = None
+    z_score: float | None = None
+    consistency_flag: str = "unspecified"  # single_source | consistent | conflict
 
     @property
     def error_m(self) -> float:
@@ -91,6 +93,8 @@ def load_ranging_csv(path: Path) -> list[RangingSample]:
                     bearing_deg=_optional_float(row.get("bearing_deg")),
                     fusion_confidence=_optional_float(row.get("fusion_confidence")),
                     lidar_points=_optional_int(row.get("lidar_points")),
+                    z_score=_optional_float(row.get("z_score")),
+                    consistency_flag=(row.get("consistency_flag") or "unspecified").strip(),
                 )
             )
     return samples
@@ -166,6 +170,11 @@ def grouped_summaries(
         "object_class": lambda row: row.object_class,
         "fusion_method": lambda row: row.fusion_method,
         "distance_bin": lambda row: distance_bin(row.ground_truth_m),
+        # Validates the cross-modal consistency flag itself: if it is a
+        # meaningful signal, samples flagged "conflict" should show larger
+        # measured error than "consistent" ones, even though the flag is
+        # computed with no access to ground truth.
+        "consistency_flag": lambda row: row.consistency_flag,
     }
     output: dict[str, dict[str, RangingSummary]] = {}
     for dimension, key_function in dimensions.items():

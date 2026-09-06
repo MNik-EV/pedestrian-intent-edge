@@ -189,8 +189,11 @@ function render(d){
   closestSub.textContent = d.objects?.length? (d.objects.length+' object(s) detected') : 'No detections';
   tbody.innerHTML='';
   (d.objects||[]).forEach(o=>{
-    const ok = o.distance_m!=null && o.lidar_points>=3;
-    const st = ok? '<span class="oktxt">OK</span>' : '<span class="warntxt">weak</span>';
+    let st;
+    if (o.consistency==='consistent') st='<span class="oktxt">cross-checked</span>';
+    else if (o.consistency==='conflict') st=`<span class="warntxt">conflict (z=${o.z_score!=null?o.z_score.toFixed(1):'?'})</span>`;
+    else if (o.distance_m!=null && o.lidar_points>=3) st='<span class="oktxt">OK</span>';
+    else st='<span class="warntxt">weak</span>';
     const fus = o.fusion? String(o.fusion).replace('bearing_cluster_','') : '—';
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${o.class}</td><td class="num">${o.confidence.toFixed(2)}</td><td class="num"><b>${fmt(o.distance_m)}</b></td><td class="num">${o.bearing_deg.toFixed(1)}°</td><td class="num">${o.lidar_points}</td><td class="num">${fus}</td><td>${st}</td>`;
@@ -209,7 +212,9 @@ function render(d){
     <b>Camera source</b>: ${d.camera_source}<br/>
     <b>LiDAR port</b>: ${d.lidar_port}<br/>
     <b>Uptime</b>: ${d.uptime_s.toFixed(0)} s<br/>
-    <b>Intrinsics RMS</b>: ${d.intrinsics_rms??'—'} px
+    <b>Intrinsics RMS</b>: ${d.intrinsics_rms??'—'} px<br/>
+    <b>Cross-modal mean|z|</b>: ${(d.cross_modal?.mean_abs_zscore||0).toFixed(2)}
+    (n=${d.cross_modal?.n_samples||0}, conflicts=${d.cross_modal?.n_conflicts||0})
   `;
   drawRadar(d);
 }
@@ -329,6 +334,7 @@ class ShowcaseEngine:
             "lidar_hz": snap.lidar_hz,
             "detect_ms": snap.detect_ms,
             "projected_count": snap.projected_count,
+            "cross_modal": snap.cross_modal,
         }
 
 
@@ -392,6 +398,9 @@ async def _loop() -> None:
             "cpu_percent": psutil.cpu_percent(interval=None),
             "uptime_s": time.monotonic() - START,
             "projected_count": snap["projected_count"],
+            "cross_modal": {
+                k: round(v, 3) for k, v in (snap.get("cross_modal") or {}).items()
+            },
             "experiment_id": LOGGER.exp_id,
             "detector": ENGINE.detector.name(),
             "camera_source": type(ENGINE.perception.camera).__name__,

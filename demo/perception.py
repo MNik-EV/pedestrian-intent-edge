@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import yaml
 
+from amp_core.calibration.cross_modal_monitor import CrossModalMonitor
 from amp_core.calibration.distance_fusion import fuse_detections_distances
 from amp_core.calibration.transforms import (
     CameraIntrinsics,
@@ -91,6 +92,9 @@ class DemoObject:
     fusion_method: str = ""
     fusion_conf: float = 0.0
     mono_prior_m: float | None = None
+    variance_m2: float | None = None
+    z_score: float | None = None
+    consistency_flag: str = "single_source"
 
 
 @dataclass
@@ -106,6 +110,7 @@ class DemoSnapshot:
     detect_ms: float
     projected_count: int
     calib_notes: list[str] = field(default_factory=list)
+    cross_modal: dict[str, float] = field(default_factory=dict)
 
     def objects_dict(self) -> list[dict[str, Any]]:
         out = []
@@ -124,6 +129,8 @@ class DemoSnapshot:
                     "mono_prior_m": None
                     if o.mono_prior_m is None
                     else round(o.mono_prior_m, 2),
+                    "z_score": None if o.z_score is None else round(o.z_score, 2),
+                    "consistency": o.consistency_flag,
                     "bbox": {
                         "x1": o.bbox.x1,
                         "y1": o.bbox.y1,
@@ -181,6 +188,7 @@ class DemoPerception:
         self.camera.start()
         self.lidar.start()
         self._ema: dict[int, float] = {}
+        self.cross_modal = CrossModalMonitor()
 
     def close(self) -> None:
         self.camera.stop()
@@ -221,6 +229,7 @@ class DemoPerception:
             self.ext,
             K,
         )
+        self.cross_modal.update(fused)
 
         vis = bgr.copy()
         for u, v, r in projected:
@@ -242,16 +251,28 @@ class DemoPerception:
                     fusion_method=f.method,
                     fusion_conf=f.confidence,
                     mono_prior_m=f.mono_prior_m,
+                    variance_m2=f.variance_m2,
+                    z_score=f.z_score,
+                    consistency_flag=f.consistency_flag,
                 )
             )
             x1, y1, x2, y2 = map(int, (d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2))
-            ok = dist is not None and f.n_points >= 3
-            color = (0, 220, 120) if ok else (0, 160, 255)
+            # Green = LiDAR/monocular cross-checked and agree; amber = both
+            # available but disagree beyond their combined uncertainty
+            # (flagged, not hidden); blue = single-source (no cross-check).
+            if f.consistency_flag == "consistent":
+                color = (0, 220, 120)
+            elif f.consistency_flag == "conflict":
+                color = (0, 200, 255)
+            else:
+                color = (0, 160, 255) if dist is not None else (60, 60, 220)
             cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
             if dist is not None:
                 label = f"{d.class_name}  {dist:.2f} m"
                 if f.mono_prior_m is not None:
                     label += f"  (mono~{f.mono_prior_m:.1f})"
+                if f.consistency_flag == "conflict":
+                    label += "  [conflict]"
             else:
                 label = f"{d.class_name}  no-lidar"
             cv2.putText(
@@ -267,9 +288,11 @@ class DemoPerception:
             cv2.line(vis, (cx, y2), (cx, min(h - 1, y2 + 18)), color, 2)
 
         closest = None if sc.closest_m > 1e8 else sc.closest_m
+        xmodal = self.cross_modal.features()
         cv2.putText(
             vis,
-            f"fusion=bearing+cluster  cam={fr.fps:.1f}fps  lidar={sc.hz:.1f}Hz  {self.detector.name()}",
+            f"fusion=bearing+cluster+IVW  cam={fr.fps:.1f}fps  lidar={sc.hz:.1f}Hz  "
+            f"{self.detector.name()}  xmodal|z|={xmodal['mean_abs_zscore']:.2f}",
             (10, h - 12),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
@@ -300,4 +323,5 @@ class DemoPerception:
             detect_ms=detect_ms,
             projected_count=len(projected),
             calib_notes=list(self.notes),
+            cross_modal=xmodal,
         )

@@ -11,6 +11,16 @@ This module instead:
   3) Clusters depths and picks the cluster consistent with a monocular size prior
      (for persons: ~1.7 m body height → depth from bbox height).
   4) Reports a robust front-surface range (20th percentile of the chosen cluster).
+  5) When both a LiDAR cluster and a monocular prior are available, combines
+     them by inverse-variance (precision) weighting instead of a fixed blend
+     ratio, and reports the resulting variance and a disagreement z-score —
+     see _fuse_inverse_variance() and _lidar_cluster_variance()/
+     _mono_depth_variance() below. This is the estimator that minimizes
+     combined variance under independence, given each source's own
+     uncertainty, rather than an arbitrary fixed split. A persistently large
+     z-score (see amp_core/calibration/cross_modal_monitor.py) is a
+     self-supervised signal that the two modalities disagree beyond what
+     their stated uncertainties predict — useful even without ground truth.
 """
 
 from __future__ import annotations
@@ -29,6 +39,20 @@ PERSON_HEIGHT_M = 1.70
 MAX_RANGE_M = 4.5
 MIN_RANGE_M = 0.35
 
+# LD19 single-shot range noise floor (order-of-magnitude from the datasheet,
+# an engineering assumption, not a per-unit calibrated value).
+LIDAR_RANGE_STD_M = 0.03
+# Approximate adult standing-height population std-dev used only to turn the
+# monocular height prior into a depth variance; this is a stated engineering
+# assumption, not a per-subject measurement.
+PERSON_HEIGHT_STD_M = 0.07
+# Non-person classes use a deliberately wide fractional depth std, since the
+# nominal-width cue has no comparable anthropometric backing.
+GENERIC_CLASS_DEPTH_FRAC_STD = 0.25
+# Disagreement beyond this many combined-sigma is flagged as a cross-modal
+# conflict rather than silently averaged away.
+CONFLICT_Z_SCORE = 2.0
+
 
 @dataclass
 class FusedDistance:
@@ -38,6 +62,43 @@ class FusedDistance:
     method: str
     mono_prior_m: float | None
     confidence: float  # 0..1
+    variance_m2: float | None = None
+    z_score: float | None = None
+    consistency_flag: str = "single_source"  # single_source | consistent | conflict
+
+
+def _lidar_cluster_variance(ranges_in_cluster: np.ndarray) -> float:
+    """Variance of the chosen LiDAR cluster's range, floored at sensor noise."""
+    floor = LIDAR_RANGE_STD_M**2
+    if ranges_in_cluster.size < 2:
+        return floor
+    return max(floor, float(np.var(ranges_in_cluster, ddof=1)))
+
+
+def _mono_depth_variance(z: float, class_name: str) -> float:
+    """Propagate the monocular size-prior uncertainty into a depth variance.
+
+    depth = f * H_ref / h_px, so a fractional error in the assumed real-world
+    size H_ref maps to the same fractional error in depth (to first order).
+    """
+    frac = (
+        PERSON_HEIGHT_STD_M / PERSON_HEIGHT_M
+        if class_name == "person"
+        else GENERIC_CLASS_DEPTH_FRAC_STD
+    )
+    return float((z * frac) ** 2)
+
+
+def _fuse_inverse_variance(
+    z1: float, v1: float, z2: float, v2: float
+) -> tuple[float, float]:
+    """Precision-weighted combination: the minimum-variance linear unbiased
+    estimator of two independent measurements of the same quantity."""
+    w1 = 1.0 / max(v1, 1e-6)
+    w2 = 1.0 / max(v2, 1e-6)
+    z = (z1 * w1 + z2 * w2) / (w1 + w2)
+    v = 1.0 / (w1 + w2)
+    return float(z), float(v)
 
 
 @dataclass
@@ -202,24 +263,48 @@ def estimate_detection_distance(
     _, dist = cluster_score(best)
     n = int(len(best))
 
+    var_lidar = _lidar_cluster_variance(ranges[best])
     conf = min(1.0, n / 12.0)
     method = "bearing_cluster_lidar"
+    variance_out = var_lidar
+    z_score: float | None = None
+    consistency_flag = "single_source"
+
     if mono is not None:
-        err = abs(float(np.median(depths[best])) - mono)
-        if err < 0.45:
+        var_mono = _mono_depth_variance(mono, class_name)
+        disagreement = abs(dist - mono)
+        z_score = disagreement / math.sqrt(var_lidar + var_mono)
+        fused_dist, fused_var = _fuse_inverse_variance(dist, var_lidar, mono, var_mono)
+        dist = fused_dist
+        variance_out = fused_var
+        if z_score <= CONFLICT_Z_SCORE:
+            consistency_flag = "consistent"
             conf = min(1.0, conf + 0.25)
-            method = "bearing_cluster_lidar+mono"
-        elif err > 1.2 and class_name == "person":
-            dist = 0.65 * dist + 0.35 * mono
+            method = "bearing_cluster_lidar+mono_ivw"
+        else:
+            # Still fuse (precision weighting already discounts whichever
+            # source has higher variance) but flag the disagreement rather
+            # than silently averaging it away.
+            consistency_flag = "conflict"
             conf *= 0.6
-            method = "bearing_lidar_mono_blend"
+            method = "bearing_cluster_lidar+mono_ivw_conflict"
 
     if reserve_points:
         for j in best:
             points[cand_idx[int(j)]].used = True
 
     dist = float(max(MIN_RANGE_M, min(MAX_RANGE_M, dist)))
-    return FusedDistance(dist, bearing_deg, n, method, mono, float(conf))
+    return FusedDistance(
+        dist,
+        bearing_deg,
+        n,
+        method,
+        mono,
+        float(conf),
+        variance_m2=float(variance_out),
+        z_score=z_score,
+        consistency_flag=consistency_flag,
+    )
 
 
 def fuse_detections_distances(

@@ -74,6 +74,15 @@ def summarize_live_run(records: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     camera_states = [record.get("camera_connected") for record in records]
     known_camera_states = [state for state in camera_states if isinstance(state, bool)]
+    crosschecked = [
+        obj for obj in objects if obj.get("consistency") in ("consistent", "conflict")
+    ]
+    conflicts = [obj for obj in crosschecked if obj.get("consistency") == "conflict"]
+    zscores = [
+        float(obj["z_score"])
+        for obj in crosschecked
+        if isinstance(obj.get("z_score"), (int, float))
+    ]
     return {
         "records": len(records),
         "duration_s": duration_s,
@@ -91,6 +100,11 @@ def summarize_live_run(records: list[dict[str, Any]]) -> dict[str, Any]:
         "detections_with_lidar_range": len(lidar_ranged),
         "any_range_coverage": len(ranged) / len(objects) if objects else None,
         "lidar_range_coverage": len(lidar_ranged) / len(objects) if objects else None,
+        "cross_modal_crosschecked": len(crosschecked),
+        "cross_modal_conflict_rate": (
+            len(conflicts) / len(crosschecked) if crosschecked else None
+        ),
+        "cross_modal_zscore": _distribution(zscores),
     }
 
 
@@ -123,6 +137,10 @@ def main() -> int:
 | Camera connected rate | {_fmt(summary["camera_connected_rate"])} |
 | Any-range coverage | {_fmt(summary["any_range_coverage"])} |
 | LiDAR-range coverage | {_fmt(summary["lidar_range_coverage"])} |
+| Cross-modal cross-checked detections | {summary["cross_modal_crosschecked"]} |
+| Cross-modal conflict rate | {_fmt(summary["cross_modal_conflict_rate"])} |
+| Cross-modal \\|z-score\\|, median | {_fmt(summary["cross_modal_zscore"]["median"])} |
+| Cross-modal \\|z-score\\|, P95 | {_fmt(summary["cross_modal_zscore"]["p95"])} |
 """
     (args.experiment / "runtime_summary.md").write_text(report, encoding="utf-8")
     print(json.dumps(summary, indent=2))

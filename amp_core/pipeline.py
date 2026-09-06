@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from amp_core.calibration.cross_modal_monitor import CrossModalMonitor
 from amp_core.calibration.distance_fusion import fuse_detections_distances
 from amp_core.calibration.transforms import (
     CameraIntrinsics,
@@ -154,6 +155,7 @@ class AmpPipeline:
             )
         )
         self.reliability = create_reliability_estimator(ReliabilityConfig())
+        self.cross_modal = CrossModalMonitor()
         # Prefer camera-only fusion weights when no LiDAR
         fusion_mode = self.cfg.fusion_mode
         if not self.lidar_available and fusion_mode == FusionMode.ADAPTIVE_FUSION:
@@ -351,6 +353,7 @@ class AmpPipeline:
                 self.extrinsics,
                 self.intrinsics,
             )
+            self.cross_modal.update(fused_distances)
         for index, tr in enumerate(tracks):
             fused = fused_distances[index] if index < len(fused_distances) else None
             dist = fused.distance_m if fused is not None else None
@@ -373,6 +376,19 @@ class AmpPipeline:
             )
 
         objects = [t.to_dict() for t in tracks]
+        for index, obj in enumerate(objects):
+            fused = fused_distances[index] if index < len(fused_distances) else None
+            obj["fusion_consistency"] = (
+                fused.consistency_flag if fused is not None else "no_lidar"
+            )
+            obj["fusion_zscore"] = (
+                None if fused is None or fused.z_score is None else round(fused.z_score, 2)
+            )
+            obj["fusion_variance_m2"] = (
+                None
+                if fused is None or fused.variance_m2 is None
+                else round(fused.variance_m2, 4)
+            )
         if not self.lidar_available:
             vis = self._vision_sectors_from_objects(objects)
             sectors.update(vis)
@@ -392,7 +408,9 @@ class AmpPipeline:
             feats_cam = VisionQualityFeatures(0, 0, 0, 0, 0, 1.0, 1.0)
 
         conf = self.reliability.estimate(
-            lidar_features=feats_lidar, camera_features=feats_cam
+            lidar_features=feats_lidar,
+            camera_features=feats_cam,
+            cross_modal_features=self.cross_modal.features(),
         )
 
         self.ekf.predict(dt)
