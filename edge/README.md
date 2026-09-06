@@ -16,22 +16,23 @@ for this hardware pairing.
 
 ## 1. One-time Pi setup
 
-Flash **Raspberry Pi OS Lite (64-bit)** (already done per project notes),
-then on the Pi:
+Flash **Raspberry Pi OS Lite (64-bit)** (already done per project notes). Current
+Raspberry Pi OS uses the libcamera/Picamera2 stack and normally needs no camera toggle in
+`raspi-config`. With the camera connected while power is off, boot and run:
 
 ```bash
-sudo raspi-config
-# Interface Options -> Camera -> Enable  (reboot if prompted)
-
-# Verify the camera is detected and can capture (no picamera2 needed for this check):
+# Verify detection and a headless still capture:
 rpicam-hello --list-cameras
-rpicam-hello -t 2000        # should show a 2s preview log with no errors
+rpicam-jpeg --nopreview --output camera-test.jpg
 
-# Install picamera2 via apt (NOT pip — pip wheels for picamera2/libcamera are
-# unreliable on Pi OS Lite; the apt package brings the matching libcamera build):
+# Install Picamera2 via apt if the Lite image did not include it. Apt keeps the Python
+# package matched to libcamera; do not start with a standalone pip installation.
 sudo apt update
 sudo apt install -y python3-picamera2 --no-install-recommends
 ```
+
+Official references: [Raspberry Pi camera software](https://www.raspberrypi.com/documentation/computers/camera_software.html)
+and the [Picamera2 manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
 
 Copy this `edge/` folder onto the Pi (e.g. `scp -r edge/ pi@<pi-ip>:~/amp_edge`
 from the laptop, or `git clone` the whole repo on the Pi and just run the

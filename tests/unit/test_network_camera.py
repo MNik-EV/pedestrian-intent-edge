@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 from amp_core.vision.network_camera import NetworkCameraCapture
+from edge.camera_streamer import StreamingHandler, StreamingOutput, StreamingServer
 
 
 def _make_jpeg(value: int) -> bytes:
@@ -106,3 +107,31 @@ def test_network_camera_unreachable_raises_without_crashing():
     assert cam.connected is False
     assert cam._running is False
     cam.stop()
+
+
+def test_bundled_edge_server_and_client_round_trip():
+    output = StreamingOutput()
+    StreamingHandler.output = output
+    server = StreamingServer(("127.0.0.1", 0), StreamingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    feeding = True
+
+    def feed() -> None:
+        while feeding:
+            output.write(_FRAMES[0])
+            time.sleep(0.02)
+
+    feeder = threading.Thread(target=feed, daemon=True)
+    feeder.start()
+    port = server.server_address[1]
+    cam = NetworkCameraCapture(f"http://127.0.0.1:{port}/stream.mjpg")
+    try:
+        cam.start()
+        assert cam.read().bgr.shape == (4, 4, 3)
+    finally:
+        cam.stop()
+        feeding = False
+        feeder.join(timeout=1.0)
+        server.shutdown()
+        thread.join(timeout=2.0)

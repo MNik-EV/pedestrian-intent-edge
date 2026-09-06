@@ -22,16 +22,6 @@ import socket
 import threading
 from http import server
 
-try:
-    from picamera2 import Picamera2
-    from picamera2.encoders import MJPEGEncoder, Quality
-    from picamera2.outputs import FileOutput
-except ImportError as exc:  # pragma: no cover - only importable on a real Pi
-    raise SystemExit(
-        "picamera2 is not installed. On Raspberry Pi OS install it via apt "
-        "(not pip): sudo apt install -y python3-picamera2 --no-install-recommends"
-    ) from exc
-
 
 PAGE = """<!DOCTYPE html>
 <html>
@@ -110,6 +100,16 @@ class StreamingServer(server.ThreadingHTTPServer):
 
 
 def main() -> None:
+    try:
+        from picamera2 import Picamera2
+        from picamera2.encoders import MJPEGEncoder, Quality
+        from picamera2.outputs import FileOutput
+    except ImportError as exc:  # pragma: no cover - only available on a Pi
+        raise SystemExit(
+            "picamera2 is not installed. On Raspberry Pi OS install it via apt "
+            "(not pip): sudo apt install -y python3-picamera2 --no-install-recommends"
+        ) from exc
+
     parser = argparse.ArgumentParser(description="Pi Zero 2W IMX219-120 MJPEG streamer")
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
@@ -122,7 +122,9 @@ def main() -> None:
     picam2 = Picamera2()
     frame_duration_us = int(1_000_000 / max(1, args.fps))
     config = picam2.create_video_configuration(
-        main={"size": (args.width, args.height), "format": "RGB888"},
+        # Keep Picamera2's encoder-compatible default pixel format, matching
+        # the official hardware-MJPEG server example.
+        main={"size": (args.width, args.height)},
         controls={"FrameDurationLimits": (frame_duration_us, frame_duration_us)},
     )
     picam2.configure(config)
@@ -138,8 +140,12 @@ def main() -> None:
 
     StreamingHandler.output = output
     hostname = socket.gethostname()
-    print(f"AMP camera edge streaming: http://{hostname}.local:{args.port}/  (or the Pi's IP)")
-    print(f"Capture: {args.width}x{args.height} @ ~{args.fps}fps, quality={args.quality}")
+    print(
+        f"AMP camera edge streaming: http://{hostname}.local:{args.port}/  (or the Pi's IP)"
+    )
+    print(
+        f"Capture: {args.width}x{args.height} @ ~{args.fps}fps, quality={args.quality}"
+    )
 
     address = (args.bind, args.port)
     srv = StreamingServer(address, StreamingHandler)
