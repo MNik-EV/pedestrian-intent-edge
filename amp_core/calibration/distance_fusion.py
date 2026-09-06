@@ -1,4 +1,4 @@
-"""Robust camera–LiDAR distance fusion for detections (persons to ~4 m).
+"""Robust camera–LiDAR distance fusion for detections (persons to ~10 m).
 
 Why naive "median of LiDAR points inside bbox" fails:
   • Tall person boxes swallow nearer clutter projected into the rectangle.
@@ -36,7 +36,10 @@ from amp_core.common.types import BoundingBox
 
 
 PERSON_HEIGHT_M = 1.70
-MAX_RANGE_M = 4.5
+# LD19 is rated to ~12 m; 10 m keeps clear separation between e.g. two people
+# standing 5 m and 7 m away in the same frame, with margin below the sensor's
+# own noise floor at maximum range.
+MAX_RANGE_M = 10.0
 MIN_RANGE_M = 0.35
 
 # LD19 single-shot range noise floor (order-of-magnitude from the datasheet,

@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, Response
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+from amp_core.calibration.distance_fusion import MAX_RANGE_M
 from demo.defaults import (
     DEFAULT_EXTRINSICS_PATH,
     DEFAULT_INTRINSICS_PATH,
@@ -301,7 +302,7 @@ class ShowcaseEngine:
                 f"t=({e.get('x', 0):.3f}, {e.get('y', 0):.3f}, {e.get('z', 0):.3f}) m · "
                 f"rpy=({e.get('roll_deg', 0):.1f}, {e.get('pitch_deg', 0):.1f}, {e.get('yaw_deg', 0):.1f})°"
             ),
-            "<b>Distance</b>: bearing-gated LiDAR fusion + person height prior (to 4.5 m)",
+            f"<b>Distance</b>: bearing-gated LiDAR fusion + person height prior (to {MAX_RANGE_M:.0f} m)",
         ]
         if range_err is not None:
             cls = (

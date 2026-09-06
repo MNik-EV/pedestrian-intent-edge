@@ -13,7 +13,7 @@ import numpy as np
 import yaml
 
 from amp_core.calibration.cross_modal_monitor import CrossModalMonitor
-from amp_core.calibration.distance_fusion import fuse_detections_distances
+from amp_core.calibration.distance_fusion import MAX_RANGE_M, fuse_detections_distances
 from amp_core.calibration.transforms import (
     CameraIntrinsics,
     ExtrinsicTransform,
@@ -59,7 +59,7 @@ def load_extrinsics(path: Path) -> ExtrinsicTransform:
     )
 
 
-def color_by_range(r: float, rmax: float = 4.0) -> tuple[int, int, int]:
+def color_by_range(r: float, rmax: float = MAX_RANGE_M) -> tuple[int, int, int]:
     t = max(0.0, min(1.0, r / rmax))
     return (int(255 * t), int(80), int(255 * (1 - t)))
 
@@ -233,7 +233,7 @@ class DemoPerception:
 
         vis = bgr.copy()
         for u, v, r in projected:
-            if r <= 4.5:
+            if r <= MAX_RANGE_M:
                 cv2.circle(vis, (int(u), int(v)), 2, color_by_range(r), -1)
 
         objects: list[DemoObject] = []
@@ -309,7 +309,7 @@ class DemoPerception:
                 p.range_m,
             )
             for p in sc.points[::2]
-            if p.range_m <= 4.5
+            if p.range_m <= MAX_RANGE_M
         ]
         return DemoSnapshot(
             jpeg=jpeg,
