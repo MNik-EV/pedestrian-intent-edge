@@ -1,8 +1,10 @@
 # Thesis material
 
-- `THESIS_FA.md`: Persian chapter-by-chapter writing scaffold.
-- `DEFENSE_FA.md`: Persian defense-slide and live-demo script.
-- `paper_outline.md`: detailed English structure and contribution boundaries.
+All project documentation, code, and writing scaffolds are in English.
+
+- `THESIS.md`: chapter-by-chapter writing scaffold with drafted narrative text.
+- `DEFENSE.md`: defense-slide outline and live-demo script.
+- `paper_outline.md`: detailed structure and contribution boundaries.
 - `methodology.md`: equations and exact implemented algorithm.
 - `experimental_setup.md`: predeclared physical test protocol.
 - `results_template.md`: tables that remain unfilled until measurement.
