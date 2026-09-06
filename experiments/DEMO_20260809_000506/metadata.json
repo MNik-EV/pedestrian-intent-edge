@@ -1,0 +1,12 @@
+{
+  "experiment_id": "DEMO_20260809_000506",
+  "started_at": "2026-08-09T00:05:06.207987+00:00",
+  "mode": "live_hardware_demo",
+  "notes": [
+    "2D LD19 LiDAR only",
+    "Practical field extrinsics (not formal optimization) unless calibrated",
+    "No SLAM / navigation in this demo"
+  ],
+  "ended_at": "2026-08-09T00:05:11.487741+00:00",
+  "num_records": 0
+}

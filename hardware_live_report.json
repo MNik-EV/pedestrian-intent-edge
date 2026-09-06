@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "ports": [
+    "COM17"
+  ],
+  "camera_index": 0,
+  "camera_fps": 10.0,
+  "camera_shape": [
+    480,
+    640,
+    3
+  ],
+  "lidar_port": "COM17",
+  "lidar_scan_hz": 10.0,
+  "lidar_packet_hz": 379.0,
+  "lidar_points": 360,
+  "closest_m": 0.083
+}
