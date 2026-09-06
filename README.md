@@ -95,6 +95,10 @@ The controlled mock harness supports `lidar_only`, `camera_only`, `fixed_fusion`
 experiments. It is separate from the real-sensor demo and must not be presented as real
 hardware evidence.
 
+For final physical data, `evaluation/evaluate_ranging.py` computes range error and grouped
+confidence intervals from the supplied CSV, while `evaluation/evaluate_live_run.py`
+summarizes FPS, latency, connection availability, and fused-range coverage from telemetry.
+
 ## Documentation
 
 - [Hardware and wiring](docs/HARDWARE.md)

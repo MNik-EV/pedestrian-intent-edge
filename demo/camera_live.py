@@ -16,10 +16,14 @@ class CameraFrame:
     bgr: np.ndarray
     fps: float
     index: int
+    age_s: float = 0.0
+    connected: bool = True
 
 
 class LiveCamera:
-    def __init__(self, index: int | None = None, width: int = 640, height: int = 480) -> None:
+    def __init__(
+        self, index: int | None = None, width: int = 640, height: int = 480
+    ) -> None:
         # Default: USB PS3 Eye from config/demo_hardware.yaml (not laptop webcam).
         if index is None:
             from demo.defaults import default_camera_index
@@ -45,6 +49,7 @@ class LiveCamera:
             pass
         self._lock = threading.Lock()
         self._frame: np.ndarray | None = None
+        self._frame_mono: float | None = None
         self.fps = 0.0
         self._n = 0
         self._t0 = time.monotonic()
@@ -61,6 +66,7 @@ class LiveCamera:
                 break
             time.sleep(0.02)
         if self._frame is None:
+            self.stop()
             raise RuntimeError("Camera opened but produced no frames")
 
     def stop(self) -> None:
@@ -77,6 +83,7 @@ class LiveCamera:
                 continue
             with self._lock:
                 self._frame = frame
+                self._frame_mono = time.monotonic()
             self._n += 1
             now = time.monotonic()
             if now - self._t0 >= 1.0:
@@ -88,4 +95,15 @@ class LiveCamera:
         with self._lock:
             if self._frame is None:
                 raise RuntimeError("No camera frame yet")
-            return CameraFrame(bgr=self._frame.copy(), fps=self.fps, index=self.index)
+            age_s = (
+                float("inf")
+                if self._frame_mono is None
+                else max(0.0, time.monotonic() - self._frame_mono)
+            )
+            return CameraFrame(
+                bgr=self._frame.copy(),
+                fps=self.fps,
+                index=self.index,
+                age_s=age_s,
+                connected=True,
+            )

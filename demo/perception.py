@@ -100,6 +100,8 @@ class DemoSnapshot:
     lidar_xy: list[tuple[float, float, float]]
     closest_m: float | None
     camera_fps: float
+    camera_age_s: float
+    camera_connected: bool
     lidar_hz: float
     detect_ms: float
     projected_count: int
@@ -292,6 +294,8 @@ class DemoPerception:
             lidar_xy=lidar_xy,
             closest_m=closest,
             camera_fps=fr.fps,
+            camera_age_s=fr.age_s,
+            camera_connected=fr.connected,
             lidar_hz=sc.hz,
             detect_ms=detect_ms,
             projected_count=len(projected),

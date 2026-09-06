@@ -33,6 +33,8 @@ class CameraFrame:
     bgr: np.ndarray
     fps: float
     index: int = -1  # not applicable to a network source; kept for interface parity
+    age_s: float = 0.0
+    connected: bool = False
 
 
 class NetworkCameraCapture:
@@ -51,6 +53,7 @@ class NetworkCameraCapture:
         self.first_frame_timeout_s = first_frame_timeout_s
         self._lock = threading.Lock()
         self._frame: np.ndarray | None = None
+        self._frame_mono: float | None = None
         self.fps = 0.0
         self.connected = False
         self.last_error: str | None = None
@@ -65,7 +68,9 @@ class NetworkCameraCapture:
             return
         self._running = True
         self._first_frame.clear()
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="net-camera")
+        self._thread = threading.Thread(
+            target=self._loop, daemon=True, name="net-camera"
+        )
         self._thread.start()
         if not self._first_frame.wait(timeout=self.first_frame_timeout_s):
             self.stop()
@@ -84,7 +89,17 @@ class NetworkCameraCapture:
         with self._lock:
             if self._frame is None:
                 raise RuntimeError(f"No camera frame yet from {self.url}")
-            return CameraFrame(bgr=self._frame.copy(), fps=self.fps)
+            age_s = (
+                float("inf")
+                if self._frame_mono is None
+                else max(0.0, time.monotonic() - self._frame_mono)
+            )
+            return CameraFrame(
+                bgr=self._frame.copy(),
+                fps=self.fps,
+                age_s=age_s,
+                connected=self.connected,
+            )
 
     def _mark_frame(self, jpg: bytes) -> None:
         img = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -92,6 +107,7 @@ class NetworkCameraCapture:
             return
         with self._lock:
             self._frame = img
+            self._frame_mono = time.monotonic()
         self._first_frame.set()
         self._n += 1
         now = time.monotonic()

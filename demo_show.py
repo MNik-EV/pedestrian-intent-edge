@@ -197,7 +197,7 @@ function render(d){
     tbody.appendChild(tr);
   });
   pills.innerHTML=`
-    <div class="pill ok">CAM ${d.camera_fps.toFixed(1)} FPS</div>
+    <div class="pill ${d.camera_connected?'ok':'err'}">CAM ${d.camera_connected?'LIVE':'RECONNECT'} ${d.camera_fps.toFixed(1)} FPS</div>
     <div class="pill ok">LIDAR ${d.lidar_hz.toFixed(1)} Hz</div>
     <div class="pill">YOLO ${d.detect_ms.toFixed(0)} ms</div>
     <div class="pill">CPU ${d.cpu_percent.toFixed(0)}%</div>
@@ -324,6 +324,8 @@ class ShowcaseEngine:
             "lidar_xy": snap.lidar_xy,
             "closest_m": snap.closest_m,
             "camera_fps": snap.camera_fps,
+            "camera_age_s": snap.camera_age_s,
+            "camera_connected": snap.camera_connected,
             "lidar_hz": snap.lidar_hz,
             "detect_ms": snap.detect_ms,
             "projected_count": snap.projected_count,
@@ -337,6 +339,14 @@ async def lifespan(app: FastAPI):
     LOGGER = DemoLogger(prefix="SHOW")
     ENGINE = ShowcaseEngine(
         ARGS.camera, ARGS.camera_url, ARGS.lidar_port, ARGS.intrinsics, ARGS.extrinsics
+    )
+    LOGGER.update_context(
+        camera_source=type(ENGINE.perception.camera).__name__,
+        camera_url=getattr(ENGINE.perception.camera, "url", None),
+        lidar_port=ENGINE.perception.lidar.port,
+        detector=ENGINE.detector.name(),
+        intrinsics=ARGS.intrinsics,
+        extrinsics=ARGS.extrinsics,
     )
     print("SHOWCASE experiment:", LOGGER.dir.resolve())
     print("Detector:", ENGINE.detector.name())
@@ -375,6 +385,8 @@ async def _loop() -> None:
             if snap["closest_m"] is None
             else round(snap["closest_m"], 3),
             "camera_fps": round(snap["camera_fps"], 2),
+            "camera_age_s": round(snap["camera_age_s"], 3),
+            "camera_connected": snap["camera_connected"],
             "lidar_hz": round(snap["lidar_hz"], 2),
             "detect_ms": round(snap["detect_ms"], 1),
             "cpu_percent": psutil.cpu_percent(interval=None),
@@ -397,6 +409,8 @@ async def _loop() -> None:
                     "objects": payload["objects"],
                     "closest_m": payload["closest_m"],
                     "camera_fps": payload["camera_fps"],
+                    "camera_age_s": payload["camera_age_s"],
+                    "camera_connected": payload["camera_connected"],
                     "lidar_hz": payload["lidar_hz"],
                     "detect_ms": payload["detect_ms"],
                     "projected_count": payload["projected_count"],

@@ -75,6 +75,8 @@ def test_network_camera_receives_and_decodes_frames(mjpeg_server):
         frame = cam.read()
         assert frame.bgr is not None
         assert frame.bgr.shape == (4, 4, 3)
+        assert frame.connected is True
+        assert frame.age_s < 1.0
         deadline = time.monotonic() + 2.0
         while cam.fps <= 0 and time.monotonic() < deadline:
             time.sleep(0.05)

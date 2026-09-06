@@ -132,7 +132,7 @@ function render(d){
     tbody.appendChild(tr);
   });
   pills.innerHTML=`
-    <div class="pill ok">CAM ${d.camera_fps.toFixed(1)} FPS</div>
+    <div class="pill ${d.camera_connected?'ok':'err'}">CAM ${d.camera_connected?'LIVE':'RECONNECT'} ${d.camera_fps.toFixed(1)} FPS</div>
     <div class="pill ok">LIDAR ${d.lidar_hz.toFixed(1)} Hz</div>
     <div class="pill">CPU ${d.cpu_percent.toFixed(0)}%</div>
     <div class="pill">DET ${d.detect_ms.toFixed(0)} ms</div>
@@ -173,6 +173,8 @@ async def _loop() -> None:
             ],
             "closest_m": None if snap.closest_m is None else round(snap.closest_m, 3),
             "camera_fps": round(snap.camera_fps, 2),
+            "camera_age_s": round(snap.camera_age_s, 3),
+            "camera_connected": snap.camera_connected,
             "lidar_hz": round(snap.lidar_hz, 2),
             "detect_ms": round(snap.detect_ms, 1),
             "cpu_percent": cpu,
@@ -190,6 +192,8 @@ async def _loop() -> None:
                 "objects": payload["objects"],
                 "closest_m": payload["closest_m"],
                 "camera_fps": payload["camera_fps"],
+                "camera_age_s": payload["camera_age_s"],
+                "camera_connected": payload["camera_connected"],
                 "lidar_hz": payload["lidar_hz"],
                 "detect_ms": payload["detect_ms"],
                 "cpu_percent": payload["cpu_percent"],
@@ -223,6 +227,14 @@ async def lifespan(app: FastAPI):
         lidar_port=args.lidar_port,
         intrinsics_path=args.intrinsics,
         extrinsics_path=args.extrinsics,
+    )
+    LOGGER.update_context(
+        camera_source=type(PERCEPTION.camera).__name__,
+        camera_url=getattr(PERCEPTION.camera, "url", None),
+        lidar_port=PERCEPTION.lidar.port,
+        detector=PERCEPTION.detector.name(),
+        intrinsics=args.intrinsics,
+        extrinsics=args.extrinsics,
     )
     print("Detector:", PERCEPTION.detector.name())
     task = asyncio.create_task(_loop())
