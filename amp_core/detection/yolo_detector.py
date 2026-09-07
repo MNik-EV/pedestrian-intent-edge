@@ -109,6 +109,7 @@ def filter_detections(
                 timestamp=d.timestamp,
                 inference_latency_ms=d.inference_latency_ms,
                 track_id=d.track_id,
+                keypoints=d.keypoints,
             )
         )
     by_class: dict[str, list[Detection]] = {}
@@ -156,9 +157,9 @@ class YoloV8Detector(DetectorBackend):
             self._model = None
 
     def name(self) -> str:
-        return (
-            "yolov8n" if self._model is not None else f"yolo_unavailable:{self._error}"
-        )
+        if self._model is None:
+            return f"yolo_unavailable:{self._error}"
+        return Path(self.cfg.model_path or "yolov8n.pt").stem
 
     def detect(
         self, image_bgr_or_gray: bytes, width: int, height: int, channels: int
@@ -189,13 +190,17 @@ class YoloV8Detector(DetectorBackend):
         names = r0.names
         if r0.boxes is None:
             return out
-        for box in r0.boxes:
+        kpts_data = r0.keypoints.data if r0.keypoints is not None else None
+        for i, box in enumerate(r0.boxes):
             cls_id = int(box.cls.item())
             conf = float(box.conf.item())
             class_name = str(names.get(cls_id, cls_id))
             if class_name not in DEFAULT_ALLOW:
                 continue
             xyxy = box.xyxy[0].tolist()
+            keypoints = None
+            if kpts_data is not None:
+                keypoints = [tuple(map(float, kp)) for kp in kpts_data[i].tolist()]
             out.append(
                 Detection(
                     class_name=class_name,
@@ -205,6 +210,7 @@ class YoloV8Detector(DetectorBackend):
                     ),
                     timestamp=Timestamp.now(),
                     inference_latency_ms=latency,
+                    keypoints=keypoints,
                 )
             )
         return filter_detections(

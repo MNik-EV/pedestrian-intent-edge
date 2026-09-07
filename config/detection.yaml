@@ -1,13 +1,16 @@
 detection:
-  # PC: yolov8n (auto). Avoid combined Face+HOG — causes duplicate persons.
+  # PC: yolov8n-pose (auto) — adds COCO-17 skeleton keypoints for persons on
+  # top of detection; single-class (person) model, so non-person classes are
+  # no longer detected in the live demo path. Avoid combined Face+HOG —
+  # causes duplicate persons.
   backend: auto
-  model_path: yolov8n.pt
+  model_path: yolov8n-pose.pt
   conf_threshold: 0.50
   iou_threshold: 0.50
   input_width: 640
   input_height: 640
   device: cpu
-  class_names: [person, chair, bottle, laptop, tv, cup, book, cell phone]
+  class_names: [person]
 
 tracking:
   iou_threshold: 0.35

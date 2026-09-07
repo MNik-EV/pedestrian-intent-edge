@@ -93,6 +93,9 @@ td.num{font-variant-numeric:tabular-nums}
 .note{padding:14px 16px;color:var(--muted);font-size:.9rem;line-height:1.7}
 .note b{color:var(--text)}
 .oktxt{color:var(--ok)}.badtxt{color:var(--bad)}.warntxt{color:var(--warn)}
+.intent-approaching{color:var(--bad);font-weight:700}
+.intent-leaving{color:var(--warn);font-weight:700}
+.intent-standing{color:var(--ok);font-weight:700}
 .footer{padding:0 22px 22px;color:var(--muted);font-size:.8rem;max-width:1600px;margin:0 auto}
 </style>
 </head>
@@ -113,6 +116,7 @@ td.num{font-variant-numeric:tabular-nums}
         <div class="label">Closest obstacle</div>
         <div class="value" id="closest">—</div>
         <div class="sub" id="closestSub">Waiting for LiDAR</div>
+        <div class="sub" id="intentSub"></div>
       </div>
     </div>
   </section>
@@ -126,7 +130,7 @@ td.num{font-variant-numeric:tabular-nums}
     <h2>Objects · Distance from LiDAR-in-Box</h2>
     <div style="overflow:auto;max-height:300px;padding:0 6px 8px">
       <table>
-        <thead><tr><th>Class</th><th>Conf</th><th>Distance</th><th>Bearing</th><th>LiDAR pts</th><th>Fusion</th><th>Status</th></tr></thead>
+        <thead><tr><th>Class</th><th>Conf</th><th>Distance</th><th>Bearing</th><th>LiDAR pts</th><th>Fusion</th><th>Status</th><th>Intent</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
@@ -150,6 +154,7 @@ const calib=document.getElementById('calib');
 const sys=document.getElementById('sys');
 const closest=document.getElementById('closest');
 const closestSub=document.getElementById('closestSub');
+const intentSub=document.getElementById('intentSub');
 
 function fit(){
   const parent=radar.parentElement.getBoundingClientRect();
@@ -188,6 +193,8 @@ function render(d){
   cam.src='/frame.jpg?t='+(++frameTick);
   closest.textContent = d.closest_m==null? '—' : d.closest_m.toFixed(2)+' m';
   closestSub.textContent = d.objects?.length? (d.objects.length+' object(s) detected') : 'No detections';
+  const person = (d.objects||[]).find(o=>o.class==='person' && o.intent && o.intent!=='Unknown');
+  intentSub.innerHTML = person? `Intent: <b class="intent-${person.intent.toLowerCase()}">${person.intent}</b>` : '';
   tbody.innerHTML='';
   (d.objects||[]).forEach(o=>{
     let st;
@@ -196,8 +203,9 @@ function render(d){
     else if (o.distance_m!=null && o.lidar_points>=3) st='<span class="oktxt">OK</span>';
     else st='<span class="warntxt">weak</span>';
     const fus = o.fusion? String(o.fusion).replace('bearing_cluster_','') : '—';
+    const intentTxt = (o.intent && o.intent!=='Unknown')? `<span class="intent-${o.intent.toLowerCase()}">${o.intent}</span>` : '—';
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${o.class}</td><td class="num">${o.confidence.toFixed(2)}</td><td class="num"><b>${fmt(o.distance_m)}</b></td><td class="num">${o.bearing_deg.toFixed(1)}°</td><td class="num">${o.lidar_points}</td><td class="num">${fus}</td><td>${st}</td>`;
+    tr.innerHTML=`<td>${o.class}</td><td class="num">${o.confidence.toFixed(2)}</td><td class="num"><b>${fmt(o.distance_m)}</b></td><td class="num">${o.bearing_deg.toFixed(1)}°</td><td class="num">${o.lidar_points}</td><td class="num">${fus}</td><td>${st}</td><td>${intentTxt}</td>`;
     tbody.appendChild(tr);
   });
   pills.innerHTML=`

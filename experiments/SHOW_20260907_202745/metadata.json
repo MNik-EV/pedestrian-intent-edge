@@ -1,0 +1,59 @@
+{
+  "experiment_id": "SHOW_20260907_202745",
+  "started_at": "2026-09-07T20:27:45.028332+00:00",
+  "mode": "live_hardware_demo",
+  "git_commit": "251e951e1761c797b8f3eb6cfb421f7029682ce1",
+  "git_dirty": true,
+  "software": {
+    "amp_version": "0.2.0",
+    "python": "3.11.15",
+    "opencv": "4.14.0.94",
+    "ultralytics": "8.4.116",
+    "pyserial": "3.5"
+  },
+  "host": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel"
+  },
+  "artifacts": [
+    {
+      "path": "config/demo_hardware.yaml",
+      "exists": true,
+      "sha256": "afe19447c924bdab1e450403b9c6f3f4336836dbd70a26f53aab622296a6cb23"
+    },
+    {
+      "path": "config/detection.yaml",
+      "exists": true,
+      "sha256": "9ecf30d69f9dfc2868f8d32702b5104453217b5d990856acd5b884b16692ad61"
+    },
+    {
+      "path": "calibration/imx219_intrinsics.yaml",
+      "exists": true,
+      "sha256": "29fe2a91db2cb2de1521b5b76b761fea57272d3034bb781bd18684f4bd5b71e8"
+    },
+    {
+      "path": "calibration/imx219_ld19_extrinsics.yaml",
+      "exists": true,
+      "sha256": "575d02765290de45a14c439e5c392ffba089be4b9a686a6ab106b1d03724b503"
+    },
+    {
+      "path": "yolov8n.pt",
+      "exists": true,
+      "sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36"
+    }
+  ],
+  "notes": [
+    "2D LD19 LiDAR only",
+    "Practical target-based extrinsics (not formal multi-pose metrology)",
+    "No SLAM / navigation in this demo"
+  ],
+  "runtime": {
+    "camera_source": "NetworkCameraCapture",
+    "camera_url": "http://zero2w-fusion.local:8000/stream.mjpg",
+    "lidar_port": "COM17",
+    "detector": "yolov8n-pose",
+    "intrinsics": "calibration/imx219_intrinsics.yaml",
+    "extrinsics": "calibration/imx219_ld19_extrinsics.yaml"
+  }
+}

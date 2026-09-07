@@ -1,0 +1,21 @@
+image_width: 640
+image_height: 480
+camera_model: IMX219-120 (approximate, NOT measured — dummy for tonight's demo)
+# 120 deg horizontal FOV wide-angle module (matches edge/camera_streamer.py /
+# docs/HARDWARE.md "IMX219-120"), assuming square pixels (fx == fy) and the
+# principal point at the exact image center. Derived from the pinhole model:
+#   fx = width / (2 * tan(HFOV/2)) = 640 / (2 * tan(60 deg)) ~= 184.75
+fx: 184.75
+fy: 184.75
+cx: 320.0
+cy: 240.0
+distortion: [0.0, 0.0, 0.0, 0.0, 0.0]
+method: dummy_hardcoded_no_calibration
+disclaimer: >
+  Hardcoded approximate intrinsics, not a real chessboard calibration.
+  Distances and pixel alignment will be systematically off; good enough to
+  boot the demo and get LiDAR points roughly centered, not for thesis
+  numbers. If your camera is actually the standard ~62 deg Pi Camera V2
+  lens (not the 120 deg wide module), replace fx/fy with 530.0 instead —
+  tell which is right by eye: 120 deg shows most of a room from across a
+  desk; 62 deg looks like a normal webcam framing.

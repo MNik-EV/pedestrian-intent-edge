@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,66 @@ def color_by_range(r: float, rmax: float = MAX_RANGE_M) -> tuple[int, int, int]:
     return (int(255 * t), int(80), int(255 * (1 - t)))
 
 
+# COCO-17 keypoint order and skeleton edges (Ultralytics yolov8*-pose convention).
+SKELETON_EDGES = (
+    (0, 1), (0, 2), (1, 3), (2, 4), (0, 5), (0, 6), (5, 6),
+    (5, 7), (7, 9), (6, 8), (8, 10),
+    (5, 11), (6, 12), (11, 12),
+    (11, 13), (13, 15), (12, 14), (14, 16),
+)
+KEYPOINT_CONF_MIN = 0.5
+
+
+def draw_skeleton(
+    vis: np.ndarray, keypoints: list[tuple[float, float, float]], color: tuple[int, int, int]
+) -> None:
+    pts = [(x, y) if c >= KEYPOINT_CONF_MIN else None for x, y, c in keypoints]
+    for a, b in SKELETON_EDGES:
+        if a < len(pts) and b < len(pts) and pts[a] and pts[b]:
+            pa = (int(pts[a][0]), int(pts[a][1]))
+            pb = (int(pts[b][0]), int(pts[b][1]))
+            cv2.line(vis, pa, pb, color, 2, cv2.LINE_AA)
+    for p in pts:
+        if p:
+            cv2.circle(vis, (int(p[0]), int(p[1])), 3, (255, 255, 255), -1, cv2.LINE_AA)
+
+
+INTENT_SPEED_THRESHOLD_MPS = 0.12
+INTENT_COLORS = {
+    "Approaching": (0, 90, 255),
+    "Leaving": (0, 210, 255),
+    "Standing": (120, 220, 120),
+}
+
+
+class IntentTracker:
+    """Classifies approaching/leaving/standing from a short distance history."""
+
+    def __init__(self, window: int = 8) -> None:
+        self._history: dict[int, deque[tuple[float, float]]] = {}
+        self._window = window
+
+    def update(self, key: int, distance_m: float | None) -> str:
+        if distance_m is None:
+            self._history.pop(key, None)
+            return "Unknown"
+        hist = self._history.setdefault(key, deque(maxlen=self._window))
+        hist.append((time.monotonic(), distance_m))
+        if len(hist) < 4:
+            return "Standing"
+        t0, d0 = hist[0]
+        t1, d1 = hist[-1]
+        dt = t1 - t0
+        if dt < 1e-3:
+            return "Standing"
+        speed = (d0 - d1) / dt  # positive = getting closer
+        if speed > INTENT_SPEED_THRESHOLD_MPS:
+            return "Approaching"
+        if speed < -INTENT_SPEED_THRESHOLD_MPS:
+            return "Leaving"
+        return "Standing"
+
+
 def undistort_bgr(bgr: np.ndarray, K: CameraIntrinsics) -> np.ndarray:
     """Return an image matching the pinhole model used by projection."""
     if not any(abs(v) > 1e-12 for v in K.dist_coeffs):
@@ -95,6 +156,7 @@ class DemoObject:
     variance_m2: float | None = None
     z_score: float | None = None
     consistency_flag: str = "single_source"
+    intent: str = "Unknown"
 
 
 @dataclass
@@ -131,6 +193,7 @@ class DemoSnapshot:
                     else round(o.mono_prior_m, 2),
                     "z_score": None if o.z_score is None else round(o.z_score, 2),
                     "consistency": o.consistency_flag,
+                    "intent": o.intent,
                     "bbox": {
                         "x1": o.bbox.x1,
                         "y1": o.bbox.y1,
@@ -183,12 +246,15 @@ class DemoPerception:
         self.notes.append(f"camera source: {type(self.camera).__name__}")
         self.lidar = LD19Reader(port=lidar_port)
         self.detector = create_detector(
-            DetectorConfig(backend="auto", conf_threshold=0.40, model_path="yolov8n.pt")
+            DetectorConfig(
+                backend="auto", conf_threshold=0.40, model_path="yolov8n-pose.pt"
+            )
         )
         self.camera.start()
         self.lidar.start()
         self._ema: dict[int, float] = {}
         self.cross_modal = CrossModalMonitor()
+        self.intent = IntentTracker()
 
     def close(self) -> None:
         self.camera.stop()
@@ -240,6 +306,7 @@ class DemoPerception:
         for d, f in zip(dets, fused):
             key = int(d.bbox.cx // 40) * 1000 + int(d.bbox.cy // 60)
             dist = self._smooth(key, f.distance_m)
+            intent = self.intent.update(key, dist) if d.class_name == "person" else "Unknown"
             objects.append(
                 DemoObject(
                     class_name=d.class_name,
@@ -254,6 +321,7 @@ class DemoPerception:
                     variance_m2=f.variance_m2,
                     z_score=f.z_score,
                     consistency_flag=f.consistency_flag,
+                    intent=intent,
                 )
             )
             x1, y1, x2, y2 = map(int, (d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2))
@@ -267,6 +335,8 @@ class DemoPerception:
             else:
                 color = (0, 160, 255) if dist is not None else (60, 60, 220)
             cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
+            if d.keypoints is not None:
+                draw_skeleton(vis, d.keypoints, INTENT_COLORS.get(intent, color))
             if dist is not None:
                 label = f"{d.class_name}  {dist:.2f} m"
                 if f.mono_prior_m is not None:
@@ -284,6 +354,16 @@ class DemoPerception:
                 (245, 245, 245),
                 2,
             )
+            if intent != "Unknown":
+                cv2.putText(
+                    vis,
+                    intent.upper(),
+                    (x1, min(h - 6, y2 + 22)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.62,
+                    INTENT_COLORS.get(intent, (245, 245, 245)),
+                    2,
+                )
             cx = int(d.bbox.cx)
             cv2.line(vis, (cx, y2), (cx, min(h - 1, y2 + 18)), color, 2)
 

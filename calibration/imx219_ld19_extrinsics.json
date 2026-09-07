@@ -1,0 +1,22 @@
+{
+  "x": 0.024429478046212302,
+  "y": 0.06999999999999998,
+  "z": 0.0,
+  "roll_deg": 0.0,
+  "pitch_deg": 0.0,
+  "yaw_deg": 0.0,
+  "method": "practical_field_calibration+vision_assisted_tx_refinement",
+  "disclaimer": "Ruler mount offsets + keyboard visual fine-tune (y/z/roll/pitch/yaw), plus a single-pass automated tx correction computed from a live frame + live LiDAR scan against a detected red-chair target. NOT a formal multi-pose extrinsic optimization; good for a room demo, not thesis-grade metrology.",
+  "vision_refinement": {
+    "pixel_error_before_px": 27.0,
+    "tx_correction_m": 0.1094,
+    "residual_pixel_error_after_px": 1.3,
+    "chair_bbox": [
+      243,
+      179,
+      447,
+      396
+    ],
+    "measured_range_m": 0.749
+  }
+}

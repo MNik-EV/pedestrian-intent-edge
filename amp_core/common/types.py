@@ -140,6 +140,8 @@ class Detection:
     timestamp: Timestamp
     inference_latency_ms: float = 0.0
     track_id: Optional[int] = None
+    # (x, y, confidence) per COCO-17 keypoint, pose-model detections only.
+    keypoints: Optional[list[tuple[float, float, float]]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -149,6 +151,7 @@ class Detection:
             "timestamp": self.timestamp.to_dict(),
             "inference_latency_ms": self.inference_latency_ms,
             "track_id": self.track_id,
+            "keypoints": self.keypoints,
         }
 
 
